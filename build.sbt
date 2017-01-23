@@ -47,13 +47,12 @@ lazy val commonSettings = Seq[Setting[_]](
   scalastyleConfig in scalastyle := (baseDirectory in ThisBuild).value / "scalastyle-test-config.xml",
 
   libraryDependencies ++= Seq(
+    dependencies.cats,
+    dependencies.fs2,
     Seq(
-      dependencies.cats,
-      dependencies.catsFree,
       dependencies.scalaz,
       dependencies.shapeless
     ),
-    dependencies.fs2,
     dependencies.test.map(_ % "test-internal")
   ).flatten,
   organization := "io.sigs",
