@@ -3,6 +3,7 @@ package com.example
 import fs2.Task
 import fs2.interop.cats._
 
+/** From Idris States */
 object doorWithIxFree extends App {
 
   sealed trait Open
@@ -42,6 +43,7 @@ object doorWithIxFree extends App {
   println(tsk.unsafeRun())
 }
 
+/** From Idris States */
 object doorWithSm extends App {
 
   sealed trait Open
@@ -84,4 +86,67 @@ object doorWithSm extends App {
   val tsk: Task[Int] = prog.run(interp)
 
   println(tsk.unsafeRun())
+}
+
+/** From http://alcestes.github.io/lchannels/ */
+object atm extends App {
+  
+  sealed trait NotAuthenticated
+  sealed trait Authenticated
+  
+  sealed trait AtmOp[F, T, A]
+  object AtmOp {
+    implicit val init: Sm.Initial[AtmOp, NotAuthenticated] =
+      new Sm.Initial[AtmOp, NotAuthenticated] {}
+    implicit val fin: Sm.Final[AtmOp, NotAuthenticated] =
+      new Sm.Final[AtmOp, NotAuthenticated] {}
+  }
+  final case class Authenticate(card: String, pin: String)
+    extends AtmOp[NotAuthenticated, Authenticated, Unit]
+  final case object CheckBalance
+    extends AtmOp[Authenticated, NotAuthenticated, Int]
+  final case object Quit
+    extends AtmOp[Authenticated, NotAuthenticated, Unit]
+  
+  type AtmSm[F, T, A] = Sm[AtmOp, F, T, A]
+  
+  def authenticate(card: String, pin: String): AtmSm[NotAuthenticated, Authenticated, Unit] =
+    Sm.liftF(Authenticate(card, pin))
+  val checkBalance: AtmSm[Authenticated, NotAuthenticated, Int] =
+    Sm.liftF(CheckBalance)
+  val quit: AtmSm[Authenticated, NotAuthenticated, Unit] =
+    Sm.liftF(Quit)
+  
+  val interp: Sm.Interpreter[AtmOp, Task] = new Sm.Interpreter[AtmOp, Task] {
+    override def apply[F, T, A](d: AtmOp[F, T, A]): Task[A] = d match {
+      case Authenticate(c, p) =>
+        if (p == "1234") {
+          Task.delay(println(s"Card ${c} accepted"))
+        } else {
+          Task.fail(new Exception("authentication error!!!"))
+        }
+      case CheckBalance =>
+        Task.delay {
+          println("Returning balance")
+          56
+        }
+      case Quit => Task.delay(println("Goodbye"))
+    }
+  }
+    
+  val goodPin: AtmSm[NotAuthenticated, NotAuthenticated, Int] = for {
+    _ <- authenticate("11232432", "1234")
+    b <- checkBalance
+  } yield b
+
+  val badPin: AtmSm[NotAuthenticated, NotAuthenticated, Int] = for {
+    _ <- authenticate("11232432", "9876")
+    b <- checkBalance
+  } yield b
+  
+  val tsk1: Task[Int] = goodPin.run(interp)
+  val tsk2: Task[Int] = badPin.run(interp)
+  
+  println(tsk1.unsafeRun())
+  println(tsk2.unsafeRun())
 }
