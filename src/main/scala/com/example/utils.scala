@@ -19,6 +19,28 @@ object IxMonad {
     type λ[f, t, a] = S[a]
   }
 
+  implicit def ixMonadForIndexedStateT[F[_]](implicit F: scalaz.Monad[F]): IxMonad[scalaz.IndexedStateT[F, ?, ?, ?]] = {
+    new IxMonad[scalaz.IndexedStateT[F, ?, ?, ?]] {
+      override def flatMap[S1, S2, S3, A, B](fa: scalaz.IndexedStateT[F, S1, S2, A])(
+        f: A => scalaz.IndexedStateT[F, S2, S3, B]
+      ): scalaz.IndexedStateT[F, S1, S3, B] = fa.flatMap(f)
+      override def pure[S1, A](a: A): scalaz.IndexedStateT[F, S1, S1, A] = scalaz.IndexedStateT { s: S1 =>
+        F.map(F.point(a))(a => (s, a))
+      }
+    }
+  }
+
+  implicit def ixMonadForResIndexedStateT[F[_], R[_]](implicit F: scalaz.Monad[F]): IxMonad[Sm.ResRepr[F, R]#λ] = {
+    new IxMonad[Sm.ResRepr[F, R]#λ] {
+      override def flatMap[S1, S2, S3, A, B](fa: scalaz.IndexedStateT[F, R[S1], R[S2], A])(
+        f: A => scalaz.IndexedStateT[F, R[S2], R[S3], B]
+      ): scalaz.IndexedStateT[F, R[S1], R[S3], B] = fa.flatMap(f)
+      override def pure[S1, A](a: A): scalaz.IndexedStateT[F, R[S1], R[S1], A] = scalaz.IndexedStateT { s: R[S1] =>
+        F.map(F.point(a))(a => (s, a))
+      }
+    }
+  }
+
   def monadFromIxMonad[S[_, _, _], F](implicit S: IxMonad[S]): Monad[S[F, F, ?]] = new Monad[S[F, F, ?]] {
     override def flatMap[A, B](sa: S[F, F, A])(f: A => S[F, F, B]): S[F, F, B] =
       S.flatMap(sa)(f)

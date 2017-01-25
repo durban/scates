@@ -49,8 +49,8 @@ lazy val commonSettings = Seq[Setting[_]](
   libraryDependencies ++= Seq(
     dependencies.cats,
     dependencies.fs2,
+    dependencies.scalaz,
     Seq(
-      dependencies.scalaz,
       dependencies.shapeless
     ),
     dependencies.test.map(_ % "test-internal")
@@ -93,5 +93,8 @@ lazy val dependencies = new {
     "org.scalatest" %% "scalatest" % "3.0.1"
   )
 
-  val scalaz = "org.scalaz" %% "scalaz-effect" % "7.2.8"
+  val scalaz = Seq(
+    "org.scalaz" %% "scalaz-effect" % "7.2.8",
+    "co.fs2" %% "fs2-scalaz" % "0.2.0"
+  )
 }
