@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -105,6 +105,140 @@ object doorWithSm extends App {
   val tsk: IO[Int] = prog.run[IO, Const[Null]#λ]
 
   println(tsk.unsafeRunSync())
+}
+
+/** From http://alcestes.github.io/lchannels/ */
+object atmCh extends App {
+
+  import akka.typed._
+  import akka.typed.scaladsl._
+  import akka.typed.scaladsl.AskPattern._
+  import scala.concurrent.duration._
+  import scala.util.{ Success, Failure }
+  import scala.concurrent.ExecutionContext.Implicits.global
+
+  implicit val to: akka.util.Timeout =
+    akka.util.Timeout(2.seconds)
+
+  final case class ActRef[A](ref: ActorRef[A])(implicit sch: akka.actor.Scheduler) {
+    val scheduler = sch
+    def ! (a: A): IO[Unit] = IO { ref ! a }
+    def ? [B](f: ActorRef[B] => A): IO[B] = IO.suspend {
+      IO.async[B] { cb =>
+        val fut = ref ? f
+        fut.onComplete {
+          case Success(b) => cb(Right(b))
+          case Failure(ex) => cb(Left(ex))
+        }
+      }
+    }
+  }
+
+  object msgs {
+
+    case class Authenticate(card: String, pin: String)(val cont: ActorRef[Response])
+
+    sealed abstract class Response
+    case class Failure() extends Response
+    case class Success()(val cont: ActorRef[Menu]) extends Response
+
+    sealed abstract class Menu
+    case class CheckBalance()(val cont: ActorRef[Balance]) extends Menu
+    case class Quit() extends Menu
+
+    case class Balance(amount: Int)
+  }
+
+  object client {
+
+    sealed trait AtmOp[F, T, A]
+    object AtmOp {
+      implicit val fin: Sm.Final[AtmOp, msgs.Authenticate] =
+        new Sm.Final[AtmOp, msgs.Authenticate] {}
+    }
+
+    final case class Authenticate(card: String, pin: String)
+      extends AtmOp[msgs.Authenticate, msgs.Menu, Unit]
+    final case object CheckBalance
+      extends AtmOp[msgs.Menu, msgs.Authenticate, Int]
+    final case object Quit
+      extends AtmOp[msgs.Menu, msgs.Authenticate, Unit]
+
+    type AtmSm[F, T, A] = Sm[AtmOp, F, T, A]
+
+    def authenticate(card: String, pin: String): AtmSm[msgs.Authenticate, msgs.Menu, Unit] =
+      Sm.liftF(Authenticate(card, pin))
+    val checkBalance: AtmSm[msgs.Menu, msgs.Authenticate, Int] =
+      Sm.liftF(CheckBalance)
+    val quit: AtmSm[msgs.Menu, msgs.Authenticate, Unit] =
+      Sm.liftF(Quit)
+
+    def interp(entry: ActRef[msgs.Authenticate]): Sm.Execute.Aux[AtmOp, IO, ActRef] = new Sm.Execute[AtmOp, IO] {
+      override type Res[st] = ActRef[st]
+      override def exec[F, T, A](res: ActRef[F])(d: AtmOp[F, T, A]): IO[(ActRef[T], A)] = d match {
+        case Authenticate(c, p) =>
+          for {
+            resp <- res ? msgs.Authenticate(c, p)
+            res <- resp match {
+              case msgs.Failure() => IO.raiseError(new Exception("authentication error!!!"))
+              case s @ msgs.Success() => IO.pure((ActRef(s.cont)(res.scheduler), ()))
+            }
+          } yield res
+        case CheckBalance =>
+          for {
+            balance <- res ? msgs.CheckBalance()
+          } yield (entry, balance.amount) // FIXME
+        case Quit =>
+          IO {
+            res ! msgs.Quit()
+            (entry, ())
+          }
+      }
+    }
+  }
+
+  import client._
+
+  val prog: client.AtmSm[msgs.Authenticate, msgs.Authenticate, Int] = for {
+    _ <- authenticate("11232432", "1234")
+    b <- checkBalance
+  } yield b
+
+  val mock1: Behavior[Any] = Actor.immutable { (ctx, msg) =>
+    msg match {
+      case a @ msgs.Authenticate(c, p) =>
+        println("Successful authentication")
+        a.cont ! msgs.Success()(ctx.self)
+        Actor.same
+      case m: msgs.Menu =>
+        m match {
+          case c @ msgs.CheckBalance() =>
+            println("Returning balance")
+            c.cont ! msgs.Balance(99)
+          case msgs.Quit() =>
+            println("Quit")
+            ()
+        }
+        Actor.same
+      case x =>
+        println(s"unhandled: $x")
+        Actor.same
+    }
+  }
+
+  def test(): Int = {
+    val sys = ActorSystem(mock1, "mock")
+    val entry = ActRef[msgs.Authenticate](sys)(sys.scheduler)
+    implicit val c: Sm.Create.Aux[AtmOp, ActRef, msgs.Authenticate] = Sm.Create.instance(entry)
+    implicit val i: Sm.Execute.Aux[AtmOp, IO, ActRef] = interp(entry)
+    try {
+      prog.run[IO, ActRef].unsafeRunSync()
+    } finally {
+      sys.terminate()
+    }
+  }
+
+  println(test())
 }
 
 /** From http://alcestes.github.io/lchannels/ */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,6 +49,7 @@ lazy val commonSettings = Seq[Setting[_]](
     dependencies.cats,
     dependencies.fs2,
     dependencies.scalaz,
+    dependencies.akka,
     Seq(
       dependencies.shapeless
     ),
@@ -95,5 +96,9 @@ lazy val dependencies = new {
 
   val scalaz = Seq(
     "org.scalaz" %% "scalaz-effect" % "7.2.17"
+  )
+
+  val akka = Seq(
+    "com.typesafe.akka" %% "akka-typed" % "2.5.8"
   )
 }
