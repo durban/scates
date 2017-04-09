@@ -20,8 +20,8 @@ lazy val sm = project.in(file("."))
   .settings(tutSettings)
 
 lazy val commonSettings = Seq[Setting[_]](
-  scalaVersion := "2.11.8",
-  crossScalaVersions := Seq("2.11.8", "2.12.0"),
+  scalaVersion := "2.12.1",
+  crossScalaVersions := Seq(scalaVersion.value, "2.11.8"),
   scalaOrganization := "org.typelevel",
   scalacOptions ++= Seq(
     "-feature",
@@ -64,7 +64,7 @@ lazy val commonSettings = Seq[Setting[_]](
 lazy val dependencies = new {
 
   val catsVersion = "0.9.0"
-  val circeVersion = "0.7.0"
+  val circeVersion = "0.7.1"
 
   val shapeless = "com.chuusai" %% "shapeless" % "2.3.2"
   val cats = Seq(
@@ -79,8 +79,8 @@ lazy val dependencies = new {
   )
 
   val fs2 = Seq(
-    "co.fs2" %% "fs2-core" % "0.9.2",
-    "co.fs2" %% "fs2-io" % "0.9.2",
+    "co.fs2" %% "fs2-core" % "0.9.5",
+    "co.fs2" %% "fs2-io" % "0.9.5",
     "co.fs2" %% "fs2-cats" % "0.3.0"
   )
 
