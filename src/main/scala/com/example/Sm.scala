@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,13 @@
 
 package com.example
 
+import cats.implicits._
+
 final class Sm[S[_, _, _], F, T, A] private (
   private val repr: IxFree[S, F, T, A]
 ) {
 
-  import Sm.{ Execute, Create }
+  import Sm.Execute
 
   def flatMap[B, U](f: A => Sm[S, T, U, B]): Sm[S, F, U, B] =
     new Sm(repr.flatMap(a => f(a).repr))
@@ -31,8 +33,7 @@ final class Sm[S[_, _, _], F, T, A] private (
   // TODO: infer `R`
   def run[M[_] : cats.Monad : scalaz.Monad, R[_]](
     implicit
-    exec: Execute.Aux[S, M, R],
-    mk: Create.Aux[S, R, F]
+    exec: Execute.Aux[S, M, R, F]
   ): M[A] = {
     val fx = new FunctionX[S, Sm.ResRepr[M, exec.Res]#λ] {
       def apply[G, U, X](sa: S[G, U, X]): scalaz.IndexedStateT[M, exec.Res[G], exec.Res[U], X] = {
@@ -42,9 +43,12 @@ final class Sm[S[_, _, _], F, T, A] private (
       }
     }
     val st = repr.foldMap[Sm.ResRepr[M, exec.Res]#λ](fx)
-    val initRes: exec.Res[F] = mk.mk
-    val res: M[A] = cats.Monad[M].map(st.run(initRes))(_._2)
-    res
+    for {
+      resource <- exec.init
+      rr <- st.run(resource)
+      (resource, result) = rr
+      _ <- exec.fin(resource)
+    } yield result
   }
 }
 
@@ -52,20 +56,6 @@ object Sm {
 
   type ResRepr[M[_], Res[_]] = {
     type λ[f, t, x] = scalaz.IndexedStateT[M, Res[f], Res[t], x]
-  }
-
-  trait Initial[S[_, _, _]] {
-    type F
-  }
-
-  object Initial {
-
-    type Aux[S[_, _, _], A] = Initial[S] {
-      type F = A
-    }
-
-    def define[S[_, _, _], A]: Initial.Aux[S, A] =
-      new Initial[S] { type F = A }
   }
 
   trait Final[S[_, _, _], A]
@@ -93,18 +83,24 @@ object Sm {
     }
   }
 
-  trait Execute[S[_, _, _], M[_]] {
+  trait Execute[S[_, _, _]] {
+    type M[a]
+    type InitSt
     type Res[st]
+    def init: M[Res[InitSt]]
     def exec[F, T, A](res: Res[F])(sa: S[F, T, A]): M[(Res[T], A)]
+    def fin[T](ref: Res[T]): M[Unit]
   }
 
   object Execute {
-    type Aux[S[_, _, _], M[_], R[_]] = Execute[S, M] {
+    type Aux[S[_, _, _], M0[_], R[_], F] = Execute[S] {
+      type M[a] = M0[a]
+      type InitSt = F
       type Res[st] = R[st]
     }
   }
 
-  def pure[S[_, _, _], A](a: A)(implicit i: Initial[S]): Sm[S, i.F, i.F, A] =
+  def pure[S[_, _, _], F, A](a: A): Sm[S, F, F, A] =
     new Sm(IxFree.pure(a))
 
   def liftF[S[_, _, _], F, T, A](sa: S[F, T, A]): Sm[S, F, T, A] =

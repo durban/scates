@@ -65,12 +65,6 @@ object doorWithSm extends App {
   sealed trait Closed
 
   sealed trait DoorOp[F, T, A]
-  object DoorOp {
-    implicit val init: Sm.Initial.Aux[DoorOp, Closed] =
-      Sm.Initial.define
-    implicit val fin: Sm.Final[DoorOp, Closed] =
-      new Sm.Final[DoorOp, Closed] {}
-  }
   final case object OpenDoor extends DoorOp[Closed, Open, Unit]
   final case object CloseDoor extends DoorOp[Open, Closed, Unit]
   final case object Knock extends DoorOp[Closed, Closed, Unit]
@@ -84,13 +78,17 @@ object doorWithSm extends App {
   val knock: DoorSm[Closed, Closed, Unit] =
     Sm.liftF(Knock)
 
-  implicit val interp: Sm.Execute.Aux[DoorOp, IO, Const[Null]#λ] = new Sm.Execute[DoorOp, IO] {
-    override type Res[st] = Null
-    override def exec[F, T, A](res: Null)(d: DoorOp[F, T, A]): IO[(Null, A)] = d match {
+  implicit val interp: Sm.Execute.Aux[DoorOp, IO, Const[Unit]#λ, Closed] = new Sm.Execute[DoorOp] {
+    override type M[a] = IO[a]
+    override type InitSt = Closed
+    override type Res[st] = Unit
+    override def init: IO[Unit] = IO.unit
+    override def exec[F, T, A](res: Unit)(d: DoorOp[F, T, A]): IO[(Unit, A)] = d match {
       case OpenDoor => IO((res, println("Opening door ...")))
       case CloseDoor => IO((res, println("Closing door ...")))
       case Knock => IO((res, println("Knock-knock!")))
     }
+    override def fin[T](ref: Res[T]): IO[Unit] = IO.unit
   }
 
   implicit val mk: Sm.Create.Aux[DoorOp, Const[Null]#λ, Closed] =
@@ -102,7 +100,7 @@ object doorWithSm extends App {
     _ <- close
   } yield 8
 
-  val tsk: IO[Int] = prog.run[IO, Const[Null]#λ]
+  val tsk: IO[Int] = prog.run[IO, Const[Unit]#λ]
 
   println(tsk.unsafeRunSync())
 }
@@ -152,10 +150,6 @@ object atmCh extends App {
   object client {
 
     sealed trait AtmOp[F, T, A]
-    object AtmOp {
-      implicit val fin: Sm.Final[AtmOp, msgs.Authenticate] =
-        new Sm.Final[AtmOp, msgs.Authenticate] {}
-    }
 
     final case class Authenticate(card: String, pin: String)
       extends AtmOp[msgs.Authenticate, msgs.Menu, Unit]
@@ -173,8 +167,11 @@ object atmCh extends App {
     val quit: AtmSm[msgs.Menu, msgs.Authenticate, Unit] =
       Sm.liftF(Quit)
 
-    def interp(entry: ActRef[msgs.Authenticate]): Sm.Execute.Aux[AtmOp, IO, ActRef] = new Sm.Execute[AtmOp, IO] {
+    def interp(entry: ActRef[msgs.Authenticate]): Sm.Execute.Aux[AtmOp, IO, ActRef, msgs.Authenticate] = new Sm.Execute[AtmOp] {
+      override type M[a] = IO[a]
       override type Res[st] = ActRef[st]
+      override type InitSt = msgs.Authenticate
+      override def init = IO.pure(entry)
       override def exec[F, T, A](res: ActRef[F])(d: AtmOp[F, T, A]): IO[(ActRef[T], A)] = d match {
         case Authenticate(c, p) =>
           for {
@@ -194,6 +191,7 @@ object atmCh extends App {
             (entry, ())
           }
       }
+      override def fin[T](ref: Res[T]): M[Unit] = IO.unit
     }
   }
 
@@ -229,8 +227,7 @@ object atmCh extends App {
   def test(): Int = {
     val sys = ActorSystem(mock1, "mock")
     val entry = ActRef[msgs.Authenticate](sys)(sys.scheduler)
-    implicit val c: Sm.Create.Aux[AtmOp, ActRef, msgs.Authenticate] = Sm.Create.instance(entry)
-    implicit val i: Sm.Execute.Aux[AtmOp, IO, ActRef] = interp(entry)
+    implicit val i: Sm.Execute.Aux[AtmOp, IO, ActRef, msgs.Authenticate] = interp(entry)
     try {
       prog.run[IO, ActRef].unsafeRunSync()
     } finally {
@@ -248,12 +245,6 @@ object atm extends App {
   sealed trait Authenticated
 
   sealed trait AtmOp[F, T, A]
-  object AtmOp {
-    implicit val init: Sm.Initial.Aux[AtmOp, NotAuthenticated] =
-      Sm.Initial.define
-    implicit val fin: Sm.Final[AtmOp, NotAuthenticated] =
-      new Sm.Final[AtmOp, NotAuthenticated] {}
-  }
   final case class Authenticate(card: String, pin: String)
     extends AtmOp[NotAuthenticated, Authenticated, Unit]
   final case object CheckBalance
@@ -270,9 +261,12 @@ object atm extends App {
   val quit: AtmSm[Authenticated, NotAuthenticated, Unit] =
     Sm.liftF(Quit)
 
-  implicit val interp: Sm.Execute.Aux[AtmOp, IO, Const[Null]#λ] = new Sm.Execute[AtmOp, IO] {
-    override type Res[st] = Null
-    override def exec[F, T, A](res: Null)(d: AtmOp[F, T, A]): IO[(Null, A)] = d match {
+  implicit val interp: Sm.Execute.Aux[AtmOp, IO, Const[Unit]#λ, NotAuthenticated] = new Sm.Execute[AtmOp] {
+    override type M[a] = IO[a]
+    override type Res[st] = Unit
+    override type InitSt = NotAuthenticated
+    override def init: IO[Unit] = IO.unit
+    override def exec[F, T, A](res: Unit)(d: AtmOp[F, T, A]): IO[(Unit, A)] = d match {
       case Authenticate(c, p) =>
         if (p == "1234") {
           IO((res, println(s"Card ${c} accepted")))
@@ -286,6 +280,7 @@ object atm extends App {
         }
       case Quit => IO((res, println("Goodbye")))
     }
+    override def fin[T](ref: Res[T]): IO[Unit] = IO.unit
   }
 
   implicit val mk: Sm.Create.Aux[AtmOp, Const[Null]#λ, NotAuthenticated] =
@@ -301,8 +296,8 @@ object atm extends App {
     b <- checkBalance
   } yield b
 
-  val tsk1: IO[Int] = goodPin.run[IO, Const[Null]#λ]
-  val tsk2: IO[Int] = badPin.run[IO, Const[Null]#λ]
+  val tsk1: IO[Int] = goodPin.run[IO, Const[Unit]#λ]
+  val tsk2: IO[Int] = badPin.run[IO, Const[Unit]#λ]
 
   println(tsk1.unsafeRunSync())
   println(tsk2.unsafeRunSync())
@@ -312,12 +307,6 @@ object atm extends App {
 object varRef extends App {
 
   sealed trait VarOp[F, T, A]
-  object VarOp {
-    implicit val init: Sm.Initial.Aux[VarOp, Unit] =
-      Sm.Initial.define
-    implicit def fin[A]: Sm.Final[VarOp, A] =
-      new Sm.Final[VarOp, A] {}
-  }
   final case class Get[A]() extends VarOp[A, A, A]
   final case class Put[F, T](t: T) extends VarOp[F, T, Unit]
 
@@ -326,19 +315,23 @@ object varRef extends App {
   def get[A]: VarSm[A, A, A] = Sm.liftF(Get())
   def put[F, T](t: T): VarSm[F, T, Unit] = Sm.liftF(Put(t))
 
-  implicit val interp: Sm.Execute.Aux[VarOp, IO, cats.Id] = new Sm.Execute[VarOp, IO] {
+  implicit val interp: Sm.Execute.Aux[VarOp, IO, cats.Id, Unit] = new Sm.Execute[VarOp] {
+    override type M[a] = IO[a]
     override type Res[st] = st
+    override type InitSt = Unit
+    override def init = IO.unit
     override def exec[F, T, A](res: F)(d: VarOp[F, T, A]): IO[(T, A)] = d match {
       case g: Get[a] => IO.pure((res, res))
       case p: Put[f, t] => IO.pure((p.t, ()))
     }
+    override def fin[T](ref: Res[T]) = IO.unit
   }
 
   implicit val mk: Sm.Create.Aux[VarOp, cats.Id, Unit] =
     Sm.Create.instance[VarOp, cats.Id, Unit](())
 
   val prog: VarSm[Unit, Double, Double] = for {
-    _ <- Sm.pure[VarOp, Unit](())
+    _ <- Sm.pure[VarOp, Unit, Unit](())
     _ <- put(56)
     _ <- put(true)
     b <- get
