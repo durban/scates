@@ -78,9 +78,10 @@ object doorWithSm extends App {
   val knock: DoorSm[Closed, Closed, Unit] =
     Sm.liftF(Knock)
 
-  implicit val interp: Sm.Execute.Aux[DoorOp, IO, Const[Unit]#λ, Closed] = new Sm.Execute[DoorOp] {
+  implicit val interp: Sm.Execute.Aux[DoorOp, IO, Const[Unit]#λ, Closed, Closed] = new Sm.Execute[DoorOp] {
     override type M[a] = IO[a]
     override type InitSt = Closed
+    override type FinSt = Closed
     override type Res[st] = Unit
     override def init: IO[Unit] = IO.unit
     override def exec[F, T, A](res: Unit)(d: DoorOp[F, T, A]): IO[(Unit, A)] = d match {
@@ -88,7 +89,7 @@ object doorWithSm extends App {
       case CloseDoor => IO((res, println("Closing door ...")))
       case Knock => IO((res, println("Knock-knock!")))
     }
-    override def fin[T](ref: Res[T]): IO[Unit] = IO.unit
+    override def fin(ref: Res[Closed]): IO[Unit] = IO.unit
   }
 
   implicit val mk: Sm.Create.Aux[DoorOp, Const[Null]#λ, Closed] =
@@ -167,10 +168,11 @@ object atmCh extends App {
     val quit: AtmSm[msgs.Menu, msgs.Authenticate, Unit] =
       Sm.liftF(Quit)
 
-    def interp(entry: ActRef[msgs.Authenticate]): Sm.Execute.Aux[AtmOp, IO, ActRef, msgs.Authenticate] = new Sm.Execute[AtmOp] {
+    def interp(entry: ActRef[msgs.Authenticate]): Sm.Execute.Aux[AtmOp, IO, ActRef, msgs.Authenticate, msgs.Authenticate] = new Sm.Execute[AtmOp] {
       override type M[a] = IO[a]
       override type Res[st] = ActRef[st]
       override type InitSt = msgs.Authenticate
+      override type FinSt = msgs.Authenticate
       override def init = IO.pure(entry)
       override def exec[F, T, A](res: ActRef[F])(d: AtmOp[F, T, A]): IO[(ActRef[T], A)] = d match {
         case Authenticate(c, p) =>
@@ -191,7 +193,7 @@ object atmCh extends App {
             (entry, ())
           }
       }
-      override def fin[T](ref: Res[T]): M[Unit] = IO.unit
+      override def fin(ref: Res[msgs.Authenticate]): M[Unit] = IO.unit
     }
   }
 
@@ -227,7 +229,7 @@ object atmCh extends App {
   def test(): Int = {
     val sys = ActorSystem(mock1, "mock")
     val entry = ActRef[msgs.Authenticate](sys)(sys.scheduler)
-    implicit val i: Sm.Execute.Aux[AtmOp, IO, ActRef, msgs.Authenticate] = interp(entry)
+    implicit val i: Sm.Execute.Aux[AtmOp, IO, ActRef, msgs.Authenticate, msgs.Authenticate] = interp(entry)
     try {
       prog.run[IO, ActRef].unsafeRunSync()
     } finally {
@@ -261,10 +263,11 @@ object atm extends App {
   val quit: AtmSm[Authenticated, NotAuthenticated, Unit] =
     Sm.liftF(Quit)
 
-  implicit val interp: Sm.Execute.Aux[AtmOp, IO, Const[Unit]#λ, NotAuthenticated] = new Sm.Execute[AtmOp] {
+  implicit val interp: Sm.Execute.Aux[AtmOp, IO, Const[Unit]#λ, NotAuthenticated, NotAuthenticated] = new Sm.Execute[AtmOp] {
     override type M[a] = IO[a]
     override type Res[st] = Unit
     override type InitSt = NotAuthenticated
+    override type FinSt = NotAuthenticated
     override def init: IO[Unit] = IO.unit
     override def exec[F, T, A](res: Unit)(d: AtmOp[F, T, A]): IO[(Unit, A)] = d match {
       case Authenticate(c, p) =>
@@ -280,7 +283,7 @@ object atm extends App {
         }
       case Quit => IO((res, println("Goodbye")))
     }
-    override def fin[T](ref: Res[T]): IO[Unit] = IO.unit
+    override def fin(ref: Res[NotAuthenticated]): IO[Unit] = IO.unit
   }
 
   implicit val mk: Sm.Create.Aux[AtmOp, Const[Null]#λ, NotAuthenticated] =
@@ -315,16 +318,17 @@ object varRef extends App {
   def get[A]: VarSm[A, A, A] = Sm.liftF(Get())
   def put[F, T](t: T): VarSm[F, T, Unit] = Sm.liftF(Put(t))
 
-  implicit val interp: Sm.Execute.Aux[VarOp, IO, cats.Id, Unit] = new Sm.Execute[VarOp] {
+  implicit def interp[T]: Sm.Execute.Aux[VarOp, IO, cats.Id, Unit, T] = new Sm.Execute[VarOp] {
     override type M[a] = IO[a]
     override type Res[st] = st
     override type InitSt = Unit
+    override type FinSt = T
     override def init = IO.unit
-    override def exec[F, T, A](res: F)(d: VarOp[F, T, A]): IO[(T, A)] = d match {
+    override def exec[F, T1, A](res: F)(d: VarOp[F, T1, A]): IO[(T1, A)] = d match {
       case g: Get[a] => IO.pure((res, res))
       case p: Put[f, t] => IO.pure((p.t, ()))
     }
-    override def fin[T](ref: Res[T]) = IO.unit
+    override def fin(ref: Res[T]) = IO.unit
   }
 
   implicit val mk: Sm.Create.Aux[VarOp, cats.Id, Unit] =

@@ -33,7 +33,7 @@ final class Sm[S[_, _, _], F, T, A] private (
   // TODO: infer `R`
   def run[M[_] : cats.Monad : scalaz.Monad, R[_]](
     implicit
-    exec: Execute.Aux[S, M, R, F]
+    exec: Execute.Aux[S, M, R, F, T]
   ): M[A] = {
     val fx = new FunctionX[S, Sm.ResRepr[M, exec.Res]#λ] {
       def apply[G, U, X](sa: S[G, U, X]): scalaz.IndexedStateT[M, exec.Res[G], exec.Res[U], X] = {
@@ -57,8 +57,6 @@ object Sm {
   type ResRepr[M[_], Res[_]] = {
     type λ[f, t, x] = scalaz.IndexedStateT[M, Res[f], Res[t], x]
   }
-
-  trait Final[S[_, _, _], A]
 
   trait Create[S[_, _, _]] {
     type Res[st]
@@ -86,16 +84,18 @@ object Sm {
   trait Execute[S[_, _, _]] {
     type M[a]
     type InitSt
+    type FinSt
     type Res[st]
     def init: M[Res[InitSt]]
     def exec[F, T, A](res: Res[F])(sa: S[F, T, A]): M[(Res[T], A)]
-    def fin[T](ref: Res[T]): M[Unit]
+    def fin(ref: Res[FinSt]): M[Unit]
   }
 
   object Execute {
-    type Aux[S[_, _, _], M0[_], R[_], F] = Execute[S] {
+    type Aux[S[_, _, _], M0[_], R[_], F, T] = Execute[S] {
       type M[a] = M0[a]
       type InitSt = F
+      type FinSt = T
       type Res[st] = R[st]
     }
   }
