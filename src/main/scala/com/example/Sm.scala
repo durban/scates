@@ -31,7 +31,7 @@ final class Sm[S[_, _, _], F, T, A] private (
     new Sm(repr.map(f))
 
   // TODO: infer `R`
-  def run[M[_] : cats.Monad : scalaz.Monad, R[_]](
+  def run[M[_] : cats.Monad : scalaz.Monad : scalaz.BindRec, R[_]](
     implicit
     exec: Execute.Aux[S, M, R, F, T]
   ): M[A] = {

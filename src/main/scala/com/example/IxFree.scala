@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 
 package com.example
 
+import scala.annotation.tailrec
+
 sealed abstract class IxFree[S[_, _, _], F, T, A] extends Product with Serializable {
 
   import IxFree._
@@ -26,19 +28,32 @@ sealed abstract class IxFree[S[_, _, _], F, T, A] extends Product with Serializa
   def map[B](f: A => B): IxFree[S, F, T, B] =
     flatMap(a => Pure(f(a)))
 
-  final def step: IxFree[S, F, T, A] = this match {
-    case FlatMapped(FlatMapped(c, f), g) =>
-      c.flatMap(cc => f(cc).flatMap(g)).step
-    case fm: FlatMapped[S, F, u, T, b, A] =>
-      fm.s match {
-        case p: Pure[S, f, A] =>
-          fm.f(p.a).step
-        case _ => fm
-      }
-    case x => x
+  @tailrec
+  final def step: IxFree[S, F, T, A] = {
+    val r = this match {
+      case FlatMapped(FlatMapped(c, f), g) =>
+        Left(c.flatMap(cc => f(cc).flatMap(g)))
+      case fm: FlatMapped[S, F, u, T, b, A] =>
+        fm.s match {
+          case p: Pure[S, f, A] =>
+            Left(fm.f(p.a))
+          case _ =>
+            Right(fm)
+        }
+      case x =>
+        Right(x)
+    }
+
+    r match {
+      case Left(rec) =>
+        rec.step
+      case Right(done) =>
+        done
+    }
   }
 
   final def foldMap[M[_, _, _]](f: FunctionX[S[?, ?, ?], M[?, ?, ?]])(implicit M: IxMonad[M]): M[F, T, A] = {
+    // XXX: use tailRecM to make it stack-safe
     def go[G, U, X](curr: IxFree[S, G, U, X]): M[G, U, X] = curr.step match {
       case p: Pure[S, G, X] =>
         M.pure[G, X](p.a)
@@ -75,5 +90,6 @@ object IxFree {
       fa flatMap f
     def pure[F, A](a: A): IxFree[S, F, F, A] =
       pure(a)
+    def tailRecM[F, A, B](a: A)(f: A => IxFree[S, F, F, Either[A, B]]): IxFree[S, F, F, B] = ??? // TODO
   }
 }

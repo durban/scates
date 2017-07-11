@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ trait IxMonad[S[_, _, _]] {
   def pure[F, A](a: A): S[F, F, A]
   def map[F, T, A, B](fa: S[F, T, A])(f: A => B): S[F, T, B] =
     flatMap(fa)(a => pure(f(a)))
+  def tailRecM[F, A, B](a: A)(f: A => S[F, F, Either[A, B]]): S[F, F, B]
 }
 
 object IxMonad {
@@ -35,7 +36,7 @@ object IxMonad {
     type λ[f, t, a] = S[a]
   }
 
-  implicit def ixMonadForIndexedStateT[F[_]](implicit F: scalaz.Monad[F]): IxMonad[scalaz.IndexedStateT[F, ?, ?, ?]] = {
+  implicit def ixMonadForIndexedStateT[F[_]](implicit F: scalaz.Monad[F], Fb: scalaz.BindRec[F]): IxMonad[scalaz.IndexedStateT[F, ?, ?, ?]] = {
     new IxMonad[scalaz.IndexedStateT[F, ?, ?, ?]] {
       override def flatMap[S1, S2, S3, A, B](fa: scalaz.IndexedStateT[F, S1, S2, A])(
         f: A => scalaz.IndexedStateT[F, S2, S3, B]
@@ -43,16 +44,22 @@ object IxMonad {
       override def pure[S1, A](a: A): scalaz.IndexedStateT[F, S1, S1, A] = scalaz.IndexedStateT { s: S1 =>
         F.map(F.point(a))(a => (s, a))
       }
+      override def tailRecM[S1, A, B](a: A)(f: A => scalaz.IndexedStateT[F, S1, S1, Either[A, B]]): scalaz.IndexedStateT[F, S1, S1, B] = {
+        scalaz.BindRec[scalaz.IndexedStateT[F, S1, S1, ?]].tailrecM({ a: A => f(a).map(scalaz.\/.fromEither)(F) })(a)
+      }
     }
   }
 
-  implicit def ixMonadForResIndexedStateT[F[_], R[_]](implicit F: scalaz.Monad[F]): IxMonad[Sm.ResRepr[F, R]#λ] = {
+  implicit def ixMonadForResIndexedStateT[F[_], R[_]](implicit F: scalaz.Monad[F], Fb: scalaz.BindRec[F]): IxMonad[Sm.ResRepr[F, R]#λ] = {
     new IxMonad[Sm.ResRepr[F, R]#λ] {
       override def flatMap[S1, S2, S3, A, B](fa: scalaz.IndexedStateT[F, R[S1], R[S2], A])(
         f: A => scalaz.IndexedStateT[F, R[S2], R[S3], B]
       ): scalaz.IndexedStateT[F, R[S1], R[S3], B] = fa.flatMap(f)
       override def pure[S1, A](a: A): scalaz.IndexedStateT[F, R[S1], R[S1], A] = scalaz.IndexedStateT { s: R[S1] =>
         F.map(F.point(a))(a => (s, a))
+      }
+      override def tailRecM[S1, A, B](a: A)(f: A => scalaz.IndexedStateT[F, R[S1], R[S1], Either[A, B]]): scalaz.IndexedStateT[F, R[S1], R[S1], B] = {
+        scalaz.BindRec[scalaz.IndexedStateT[F, R[S1], R[S1], ?]].tailrecM({ a: A => f(a).map(scalaz.\/.fromEither)(F) })(a)
       }
     }
   }
@@ -62,8 +69,13 @@ object IxMonad {
       S.flatMap(sa)(f)
     override def pure[A](a: A): S[F, F, A] =
       S.pure(a)
-    override def tailRecM[A, B](a: A)(f: A => S[F, F, Either[A, B]]): S[F, F, B] =
-      ??? // TODO
+    override def tailRecM[A, B](a: A)(f: A => S[F, F, Either[A, B]]): S[F, F, B] = {
+      // FIXME: is this stack safe?
+      S.flatMap(f(a)) {
+        case Left(a) => tailRecM(a)(f)
+        case Right(b) => S.pure(b)
+      }
+    }
   }
 
   def ixMonadFromMonad[S[_]](implicit S: Monad[S]): IxMonad[Fake[S]#λ] = new IxMonad[Fake[S]#λ] {
@@ -71,5 +83,7 @@ object IxMonad {
       S.flatMap(fa)(f)
     override def pure[F, A](a: A): S[A] =
       S.pure(a)
+    override def tailRecM[S1, A, B](a: A)(f: A => S[Either[A, B]]): S[B] =
+      S.tailRecM(a)(f)
   }
 }

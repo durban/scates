@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,14 @@ package object example {
     type λ[x] = C
   }
 
-  implicit def scalazMonadForCatsEffectIO: scalaz.Monad[IO] = new scalaz.Monad[IO] {
-    override def bind[A, B](fa: IO[A])(f: A => IO[B]): IO[B] = fa flatMap f
-    override def point[A](a: => A): IO[A] = IO.pure(a)
+  implicit def scalazMonadAndBindRecForCatsEffectIO: scalaz.Monad[IO] with scalaz.BindRec[IO] = {
+    new scalaz.Monad[IO] with scalaz.BindRec[IO] {
+      override def bind[A, B](fa: IO[A])(f: A => IO[B]): IO[B] =
+        fa flatMap f
+      override def point[A](a: => A): IO[A] =
+        IO.pure(a)
+      override def tailrecM[A, B](f: A => IO[scalaz.\/[A, B]])(a: A): IO[B] =
+        IO.ioEffect.tailRecM(a) { a => f(a).map(_.toEither) }
+    }
   }
 }
