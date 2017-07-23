@@ -4,7 +4,7 @@ final class Sm[S[_, _, _], F, T, A] private (
   private val repr: IxFree[S, F, T, A]
 ) {
 
-  import Sm.{ Initial, Final, Execute, Create }
+  import Sm.{ Execute, Create }
 
   def flatMap[B, U](f: A => Sm[S, T, U, B]): Sm[S, F, U, B] =
     new Sm(repr.flatMap(a => f(a).repr))
@@ -17,8 +17,6 @@ final class Sm[S[_, _, _], F, T, A] private (
     implicit
     exec: Execute.Aux[S, M, R],
     mk: Create.Aux[S, R, F],
-    F: Initial.Aux[S, F],
-    T: Final[S, T]
   ): M[A] = {
     val fx = new FunctionX[S, Sm.ResRepr[M, exec.Res]#λ] {
       def apply[G, U, X](sa: S[G, U, X]): scalaz.IndexedStateT[M, exec.Res[G], exec.Res[U], X] = {

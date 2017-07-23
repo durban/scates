@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Daniel Urban
+ * Copyright 2016-2017 Daniel Urban
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,11 +17,10 @@
 lazy val sm = project.in(file("."))
   .settings(name := "sm")
   .settings(commonSettings)
-  .settings(tutSettings)
 
 lazy val commonSettings = Seq[Setting[_]](
-  scalaVersion := "2.12.1",
-  crossScalaVersions := Seq(scalaVersion.value, "2.11.8"),
+  scalaVersion := "2.12.2-bin-typelevel-4",
+  crossScalaVersions := Seq(scalaVersion.value, "2.11.11-bin-typelevel-4"),
   scalaOrganization := "org.typelevel",
   scalacOptions ++= Seq(
     "-feature",
@@ -59,17 +58,19 @@ lazy val commonSettings = Seq[Setting[_]](
   publishMavenStyle := true,
   publishArtifact := false, // TODO,
   licenses := Seq("Apache 2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0.txt"))
-) ++ typelevelDefaultSettings
+)
 
 lazy val dependencies = new {
 
   val catsVersion = "0.9.0"
-  val circeVersion = "0.7.1"
+  val circeVersion = "0.8.0"
+  val fs2Version = "0.10.0-M4"
 
   val shapeless = "com.chuusai" %% "shapeless" % "2.3.2"
   val cats = Seq(
     "org.typelevel" %% "cats-core" % catsVersion,
-    "org.typelevel" %% "cats-free" % catsVersion
+    "org.typelevel" %% "cats-free" % catsVersion,
+    "org.typelevel" %% "cats-effect" % "0.4-09e64a7"
   )
 
   val circe = Seq(
@@ -79,8 +80,8 @@ lazy val dependencies = new {
   )
 
   val fs2 = Seq(
-    "co.fs2" %% "fs2-core" % "0.9.5",
-    "co.fs2" %% "fs2-io" % "0.9.5",
+    "co.fs2" %% "fs2-core" % fs2Version,
+    "co.fs2" %% "fs2-io" % fs2Version,
     "co.fs2" %% "fs2-cats" % "0.3.0"
   )
 
@@ -90,7 +91,7 @@ lazy val dependencies = new {
   )
 
   val test = Seq(
-    "org.scalatest" %% "scalatest" % "3.0.1"
+    "org.scalatest" %% "scalatest" % "3.0.2"
   )
 
   val scalaz = Seq(

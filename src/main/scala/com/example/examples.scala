@@ -1,8 +1,6 @@
 package com.example
 
-import fs2.Task
-import fs2.interop.cats._
-import fs2.interop.scalaz._
+import cats.effect.IO
 
 /** From Idris States */
 object doorWithIxFree extends App {
@@ -24,11 +22,11 @@ object doorWithIxFree extends App {
   val knock: DoorSm[Closed, Closed, Unit] =
     IxFree.liftF(Knock)
 
-  val interp: FunctionX[DoorOp, IxMonad.Fake[Task]#λ] = new FunctionX[DoorOp, IxMonad.Fake[Task]#λ] {
-    override def apply[F, T, A](d: DoorOp[F, T, A]): Task[A] = d match {
-      case OpenDoor => Task.delay(println("Opening door ..."))
-      case CloseDoor => Task.delay(println("Closing door ..."))
-      case Knock => Task.delay(println("Knock-knock!"))
+  val interp: FunctionX[DoorOp, IxMonad.Fake[IO]#λ] = new FunctionX[DoorOp, IxMonad.Fake[IO]#λ] {
+    override def apply[F, T, A](d: DoorOp[F, T, A]): IO[A] = d match {
+      case OpenDoor => IO(println("Opening door ..."))
+      case CloseDoor => IO(println("Closing door ..."))
+      case Knock => IO(println("Knock-knock!"))
     }
   }
 
@@ -38,10 +36,10 @@ object doorWithIxFree extends App {
     _ <- close
   } yield 8
 
-  val tsk: Task[Int] =
-    prog.foldMap[IxMonad.Fake[Task]#λ](interp)(IxMonad.ixMonadFromMonad[Task])
+  val tsk: IO[Int] =
+    prog.foldMap[IxMonad.Fake[IO]#λ](interp)(IxMonad.ixMonadFromMonad[IO])
 
-  println(tsk.unsafeRun())
+  println(tsk.unsafeRunSync())
 }
 
 /** From Idris States */
@@ -70,12 +68,12 @@ object doorWithSm extends App {
   val knock: DoorSm[Closed, Closed, Unit] =
     Sm.liftF(Knock)
 
-  implicit val interp: Sm.Execute.Aux[DoorOp, Task, Const[Null]#λ] = new Sm.Execute[DoorOp, Task] {
+  implicit val interp: Sm.Execute.Aux[DoorOp, IO, Const[Null]#λ] = new Sm.Execute[DoorOp, IO] {
     override type Res[st] = Null
-    override def exec[F, T, A](res: Null)(d: DoorOp[F, T, A]): Task[(Null, A)] = d match {
-      case OpenDoor => Task.delay((res, println("Opening door ...")))
-      case CloseDoor => Task.delay((res, println("Closing door ...")))
-      case Knock => Task.delay((res, println("Knock-knock!")))
+    override def exec[F, T, A](res: Null)(d: DoorOp[F, T, A]): IO[(Null, A)] = d match {
+      case OpenDoor => IO((res, println("Opening door ...")))
+      case CloseDoor => IO((res, println("Closing door ...")))
+      case Knock => IO((res, println("Knock-knock!")))
     }
   }
 
@@ -88,9 +86,9 @@ object doorWithSm extends App {
     _ <- close
   } yield 8
 
-  val tsk: Task[Int] = prog.run[Task, Const[Null]#λ]
+  val tsk: IO[Int] = prog.run[IO, Const[Null]#λ]
 
-  println(tsk.unsafeRun())
+  println(tsk.unsafeRunSync())
 }
 
 /** From http://alcestes.github.io/lchannels/ */
@@ -122,21 +120,21 @@ object atm extends App {
   val quit: AtmSm[Authenticated, NotAuthenticated, Unit] =
     Sm.liftF(Quit)
 
-  implicit val interp: Sm.Execute.Aux[AtmOp, Task, Const[Null]#λ] = new Sm.Execute[AtmOp, Task] {
+  implicit val interp: Sm.Execute.Aux[AtmOp, IO, Const[Null]#λ] = new Sm.Execute[AtmOp, IO] {
     override type Res[st] = Null
-    override def exec[F, T, A](res: Null)(d: AtmOp[F, T, A]): Task[(Null, A)] = d match {
+    override def exec[F, T, A](res: Null)(d: AtmOp[F, T, A]): IO[(Null, A)] = d match {
       case Authenticate(c, p) =>
         if (p == "1234") {
-          Task.delay((res, println(s"Card ${c} accepted")))
+          IO((res, println(s"Card ${c} accepted")))
         } else {
-          Task.fail(new Exception("authentication error!!!"))
+          IO.raiseError(new Exception("authentication error!!!"))
         }
       case CheckBalance =>
-        Task.delay {
+        IO {
           println("Returning balance")
           (res, 56)
         }
-      case Quit => Task.delay((res, println("Goodbye")))
+      case Quit => IO((res, println("Goodbye")))
     }
   }
 
@@ -153,11 +151,11 @@ object atm extends App {
     b <- checkBalance
   } yield b
 
-  val tsk1: Task[Int] = goodPin.run[Task, Const[Null]#λ]
-  val tsk2: Task[Int] = badPin.run[Task, Const[Null]#λ]
+  val tsk1: IO[Int] = goodPin.run[IO, Const[Null]#λ]
+  val tsk2: IO[Int] = badPin.run[IO, Const[Null]#λ]
 
-  println(tsk1.unsafeRun())
-  println(tsk2.unsafeRun())
+  println(tsk1.unsafeRunSync())
+  println(tsk2.unsafeRunSync())
 }
 
 /** From Idris States */
@@ -178,11 +176,11 @@ object varRef extends App {
   def get[A]: VarSm[A, A, A] = Sm.liftF(Get())
   def put[F, T](t: T): VarSm[F, T, Unit] = Sm.liftF(Put(t))
 
-  implicit val interp: Sm.Execute.Aux[VarOp, Task, cats.Id] = new Sm.Execute[VarOp, Task] {
+  implicit val interp: Sm.Execute.Aux[VarOp, IO, cats.Id] = new Sm.Execute[VarOp, IO] {
     override type Res[st] = st
-    override def exec[F, T, A](res: F)(d: VarOp[F, T, A]): Task[(T, A)] = d match {
-      case g: Get[a] => Task.now((res, res))
-      case p: Put[f, t] => Task.now((p.t, ()))
+    override def exec[F, T, A](res: F)(d: VarOp[F, T, A]): IO[(T, A)] = d match {
+      case g: Get[a] => IO.pure((res, res))
+      case p: Put[f, t] => IO.pure((p.t, ()))
     }
   }
 
@@ -198,5 +196,5 @@ object varRef extends App {
     f <- get
   } yield if (b) f else 4.5
 
-  println(prog.run[Task, cats.Id].unsafeRun())
+  println(prog.run[IO, cats.Id].unsafeRunSync())
 }
