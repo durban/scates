@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-lazy val sm = project.in(file("."))
-  .settings(name := "sm")
+lazy val scates = project.in(file("."))
+  .settings(name := "scates")
   .settings(commonSettings)
 
 lazy val commonSettings = Seq[Setting[_]](
