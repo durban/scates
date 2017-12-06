@@ -1,4 +1,4 @@
 scates
-Copyright 2016-2017 Daniel Urban and contributors listed in AUTHORS
+Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
 
 This product includes software developed by Daniel Urban.

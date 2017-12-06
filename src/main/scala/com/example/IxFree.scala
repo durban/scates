@@ -54,6 +54,9 @@ sealed abstract class IxFree[S[_, _, _], F, T, A] extends Product with Serializa
 
   final def foldMap[M[_, _, _]](f: FunctionX[S[?, ?, ?], M[?, ?, ?]])(implicit M: IxMonad[M]): M[F, T, A] = {
     // XXX: use tailRecM to make it stack-safe
+    // Idea: we don't actually need this to be this general;
+    // for `Sm`, it would be enough to `foldMap` to `Sm.ResRepr`.
+    // We might be able to do that in a stack-safe way.
     def go[G, U, X](curr: IxFree[S, G, U, X]): M[G, U, X] = curr.step match {
       case p: Pure[S, G, X] =>
         M.pure[G, X](p.a)
