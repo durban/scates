@@ -58,29 +58,6 @@ object Sm {
     type λ[f, t, x] = scalaz.IndexedStateT[M, Res[f], Res[t], x]
   }
 
-  trait Create[S[_, _, _]] {
-    type Res[st]
-    type Init
-    def mk: Res[Init]
-  }
-
-  object Create {
-
-    type Aux[S[_, _, _], R[_], I] = Create[S] {
-      type Res[st] = R[st]
-      type Init = I
-    }
-
-    def apply[S[_, _, _]](implicit inst: Create[S]): Create.Aux[S, inst.Res, inst.Init] =
-      inst
-
-    def instance[S[_, _, _], R[_], I](create: => R[I]): Create.Aux[S, R, I] = new Create[S] {
-      type Res[st] = R[st]
-      type Init = I
-      def mk: R[I] = create
-    }
-  }
-
   trait Execute[S[_, _, _]] {
     type M[a]
     type InitSt

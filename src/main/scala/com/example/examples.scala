@@ -92,9 +92,6 @@ object doorWithSm extends App {
     override def fin(ref: Res[Closed]): IO[Unit] = IO.unit
   }
 
-  implicit val mk: Sm.Create.Aux[DoorOp, Const[Null]#λ, Closed] =
-    Sm.Create.instance[DoorOp, Const[Null]#λ, Closed](null)
-
   val prog: DoorSm[Closed, Closed, Int] = for {
     _ <- knock
     _ <- open
@@ -286,9 +283,6 @@ object atm extends App {
     override def fin(ref: Res[NotAuthenticated]): IO[Unit] = IO.unit
   }
 
-  implicit val mk: Sm.Create.Aux[AtmOp, Const[Null]#λ, NotAuthenticated] =
-    Sm.Create.instance[AtmOp, Const[Null]#λ, NotAuthenticated](null)
-
   val goodPin: AtmSm[NotAuthenticated, NotAuthenticated, Int] = for {
     _ <- authenticate("11232432", "1234")
     b <- checkBalance
@@ -330,9 +324,6 @@ object varRef extends App {
     }
     override def fin(ref: Res[T]) = IO.unit
   }
-
-  implicit val mk: Sm.Create.Aux[VarOp, cats.Id, Unit] =
-    Sm.Create.instance[VarOp, cats.Id, Unit](())
 
   val prog: VarSm[Unit, Double, Double] = for {
     _ <- Sm.pure[VarOp, Unit, Unit](())
