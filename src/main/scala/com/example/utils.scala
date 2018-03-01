@@ -17,6 +17,7 @@
 package com.example
 
 import cats.Monad
+import cats.data.IndexedStateT
 
 trait FunctionX[F[_, _, _], G[_, _, _]] {
   def apply[A, B, C](x: F[A, B, C]): G[A, B, C]
@@ -36,30 +37,30 @@ object IxMonad {
     type λ[f, t, a] = S[a]
   }
 
-  implicit def ixMonadForIndexedStateT[F[_]](implicit F: scalaz.Monad[F], Fb: scalaz.BindRec[F]): IxMonad[scalaz.IndexedStateT[F, ?, ?, ?]] = {
-    new IxMonad[scalaz.IndexedStateT[F, ?, ?, ?]] {
-      override def flatMap[S1, S2, S3, A, B](fa: scalaz.IndexedStateT[F, S1, S2, A])(
-        f: A => scalaz.IndexedStateT[F, S2, S3, B]
-      ): scalaz.IndexedStateT[F, S1, S3, B] = fa.flatMap(f)
-      override def pure[S1, A](a: A): scalaz.IndexedStateT[F, S1, S1, A] = scalaz.IndexedStateT { s: S1 =>
-        F.map(F.point(a))(a => (s, a))
+  implicit def ixMonadForIndexedStateT[F[_]](implicit F: Monad[F]): IxMonad[IndexedStateT[F, ?, ?, ?]] = {
+    new IxMonad[IndexedStateT[F, ?, ?, ?]] {
+      override def flatMap[S1, S2, S3, A, B](fa: IndexedStateT[F, S1, S2, A])(
+        f: A => IndexedStateT[F, S2, S3, B]
+      ): IndexedStateT[F, S1, S3, B] = fa.flatMap(f)
+      override def pure[S1, A](a: A): IndexedStateT[F, S1, S1, A] = IndexedStateT { s: S1 =>
+        F.map(F.pure(a))(a => (s, a))
       }
-      override def tailRecM[S1, A, B](a: A)(f: A => scalaz.IndexedStateT[F, S1, S1, Either[A, B]]): scalaz.IndexedStateT[F, S1, S1, B] = {
-        scalaz.BindRec[scalaz.IndexedStateT[F, S1, S1, ?]].tailrecM({ a: A => f(a).map(scalaz.\/.fromEither)(F) })(a)
+      override def tailRecM[S1, A, B](a: A)(f: A => IndexedStateT[F, S1, S1, Either[A, B]]): IndexedStateT[F, S1, S1, B] = {
+        Monad[IndexedStateT[F, S1, S1, ?]].tailRecM(a)(f)
       }
     }
   }
 
-  implicit def ixMonadForResIndexedStateT[F[_], R[_]](implicit F: scalaz.Monad[F], Fb: scalaz.BindRec[F]): IxMonad[Sm.ResRepr[F, R]#λ] = {
+  implicit def ixMonadForResIndexedStateT[F[_], R[_]](implicit F: Monad[F]): IxMonad[Sm.ResRepr[F, R]#λ] = {
     new IxMonad[Sm.ResRepr[F, R]#λ] {
-      override def flatMap[S1, S2, S3, A, B](fa: scalaz.IndexedStateT[F, R[S1], R[S2], A])(
-        f: A => scalaz.IndexedStateT[F, R[S2], R[S3], B]
-      ): scalaz.IndexedStateT[F, R[S1], R[S3], B] = fa.flatMap(f)
-      override def pure[S1, A](a: A): scalaz.IndexedStateT[F, R[S1], R[S1], A] = scalaz.IndexedStateT { s: R[S1] =>
-        F.map(F.point(a))(a => (s, a))
+      override def flatMap[S1, S2, S3, A, B](fa: IndexedStateT[F, R[S1], R[S2], A])(
+        f: A => IndexedStateT[F, R[S2], R[S3], B]
+      ): IndexedStateT[F, R[S1], R[S3], B] = fa.flatMap(f)
+      override def pure[S1, A](a: A): IndexedStateT[F, R[S1], R[S1], A] = IndexedStateT { s: R[S1] =>
+        F.map(F.pure(a))(a => (s, a))
       }
-      override def tailRecM[S1, A, B](a: A)(f: A => scalaz.IndexedStateT[F, R[S1], R[S1], Either[A, B]]): scalaz.IndexedStateT[F, R[S1], R[S1], B] = {
-        scalaz.BindRec[scalaz.IndexedStateT[F, R[S1], R[S1], ?]].tailrecM({ a: A => f(a).map(scalaz.\/.fromEither)(F) })(a)
+      override def tailRecM[S1, A, B](a: A)(f: A => IndexedStateT[F, R[S1], R[S1], Either[A, B]]): IndexedStateT[F, R[S1], R[S1], B] = {
+        Monad[IndexedStateT[F, R[S1], R[S1], ?]].tailRecM(a)(f)
       }
     }
   }

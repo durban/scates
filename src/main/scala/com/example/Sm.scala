@@ -16,6 +16,7 @@
 
 package com.example
 
+import cats.data.IndexedStateT
 import cats.implicits._
 
 final class Sm[S[_, _, _], F, T, A] private (
@@ -31,13 +32,13 @@ final class Sm[S[_, _, _], F, T, A] private (
     new Sm(repr.map(f))
 
   // TODO: infer `R`
-  def run[M[_] : cats.Monad : scalaz.Monad : scalaz.BindRec, R[_]](
+  def run[M[_] : cats.Monad, R[_]](
     implicit
     exec: Execute.Aux[S, M, R, F, T]
   ): M[A] = {
     val fx = new FunctionX[S, Sm.ResRepr[M, exec.Res]#λ] {
-      def apply[G, U, X](sa: S[G, U, X]): scalaz.IndexedStateT[M, exec.Res[G], exec.Res[U], X] = {
-        scalaz.IndexedStateT { res: exec.Res[G] =>
+      def apply[G, U, X](sa: S[G, U, X]): IndexedStateT[M, exec.Res[G], exec.Res[U], X] = {
+        IndexedStateT { res: exec.Res[G] =>
           exec.exec(res)(sa)
         }
       }
@@ -55,7 +56,7 @@ final class Sm[S[_, _, _], F, T, A] private (
 object Sm {
 
   type ResRepr[M[_], Res[_]] = {
-    type λ[f, t, x] = scalaz.IndexedStateT[M, Res[f], Res[t], x]
+    type λ[f, t, x] = IndexedStateT[M, Res[f], Res[t], x]
   }
 
   trait Execute[S[_, _, _]] {
