@@ -17,12 +17,13 @@
 package com.example
 
 import cats.Id
+import cats.data.IndexedStateT
 
 import org.scalactic.TypeCheckedTripleEquals
 import org.scalatest.{ FlatSpec, Matchers }
 
 object StackSafetySpec {
-  sealed trait St
+  final case class St(n: Int)
   sealed trait Op[F, T, A]
   final case object DoIt extends Op[St, St, Unit]
 }
@@ -31,14 +32,15 @@ class StackSafetySpec extends FlatSpec with Matchers with TypeCheckedTripleEqual
 
   import StackSafetySpec._
 
-  // TODO: make it pass
-  "IxFree#foldMap" should "be stack-safe" ignore {
-    val prog: IxFree[Op, St, St, Unit] = (0 until 100000).foldLeft(IxFree.pure[Op, St, Unit](())) {
-      (fu, i) => fu.flatMap { u =>
-        IxFree.liftF[Op, St, St, Unit](DoIt)
-      }
-    }
+  final val N = 100000
 
+  val prog: IxFree[Op, St, St, Unit] = (0 until N).foldLeft(IxFree.pure[Op, St, Unit](())) {
+    (fu, i) => fu.flatMap { u =>
+      IxFree.liftF[Op, St, St, Unit](DoIt)
+    }
+  }
+
+  "IxFree#foldMap" should "be stack-safe" in {
     val r = prog.foldMap[IxMonad.Fake[Id]#λ](new FunctionX[Op, IxMonad.Fake[Id]#λ] {
       override def apply[A, B, C](f: Op[A, B, C]): C = f match {
         case DoIt =>
@@ -47,5 +49,20 @@ class StackSafetySpec extends FlatSpec with Matchers with TypeCheckedTripleEqual
     })(IxMonad.ixMonadFromMonad[Id])
 
     r should === (())
+  }
+
+  // TODO: This should pass when https://github.com/typelevel/cats/pull/2187
+  // TODO: is merged and released.
+  "IxMonad instance for IndexedStateT" should "be stack-safe" ignore {
+    val r = prog.foldMap[IndexedStateT[Id, ?, ?, ?]](new FunctionX[Op, IndexedStateT[Id, ?, ?, ?]] {
+      override def apply[A, B, C](f: Op[A, B, C]): IndexedStateT[Id, A, B, C] = f match {
+        case DoIt =>
+          IndexedStateT[Id, St, St, Unit] {
+            case St(n) => (St(n + 1), ())
+          }
+      }
+    })(IxMonad.ixMonadForIndexedStateT[Id])
+
+    r.run(St(0)) should === ((St(N), ()))
   }
 }

@@ -16,6 +16,8 @@
 
 package com.example
 
+import scala.language.existentials
+
 import scala.annotation.tailrec
 
 sealed abstract class IxFree[S[_, _, _], F, T, A] extends Product with Serializable {
@@ -53,20 +55,40 @@ sealed abstract class IxFree[S[_, _, _], F, T, A] extends Product with Serializa
   }
 
   final def foldMap[M[_, _, _]](f: FunctionX[S[?, ?, ?], M[?, ?, ?]])(implicit M: IxMonad[M]): M[F, T, A] = {
-    // XXX: use tailRecM to make it stack-safe
-    // Idea: we don't actually need this to be this general;
-    // for `Sm`, it would be enough to `foldMap` to `Sm.ResRepr`.
-    // We might be able to do that in a stack-safe way.
-    def go[G, U, X](curr: IxFree[S, G, U, X]): M[G, U, X] = curr.step match {
-      case p: Pure[S, G, X] =>
-        M.pure[G, X](p.a)
-      case s: Suspend[S, G, U, X] =>
-        f(s.s)
-      case fm: FlatMapped[S, G, u, U, y, X] =>
-        val xxx = fm.s.foldMap(f)
-        M.flatMap(xxx)(cc => go(fm.f(cc)))
-    }
-    go(this)
+    M.tailRecM(this)(new FunctionTr[IxFree[S, ?, ?, ?], M, A, A] {
+      override def apply[G, U](curr: IxFree[S, G, U, A]): M[G, X, FunctionTr.Xor[IxFree[S, ?, ?, ?], X, U, A, A]] forSome { type X } = {
+
+        /**
+         * Wraps the result in the `match` below
+         * (this is a trick, because scalac gets
+         * confused if we use `forSome` existentials).
+         */
+        sealed abstract class Result {
+          type X
+          val value: M[G, X, FunctionTr.Xor[IxFree[S, ?, ?, ?], X, U, A, A]]
+        }
+
+        /** Factory for `Result` */
+        final object Result {
+          def apply[X0](v: M[G, X0, FunctionTr.Xor[IxFree[S, ?, ?, ?], X0, U, A, A]]): Result = new Result {
+            type X = X0
+            val value = v
+          }
+        }
+
+        val result: Result = curr.step match {
+          case p: Pure[S, G, A] =>
+            Result(M.pure[G, FunctionTr.Xor[IxFree[S, ?, ?, ?], G, G, A, A]](FunctionTr.done(p.a)))
+          case s: Suspend[S, G, U, A] =>
+            Result(M.map(f(s.s))(a => FunctionTr.done[IxFree[S, ?, ?, ?], U, A, A](a)))
+          case fm: FlatMapped[S, G, u, U, b, A] =>
+            val xxx = fm.s.foldMap(f)
+            Result(M.map(xxx)(cc => FunctionTr.rec[IxFree[S, ?, ?, ?], u, U, A, A](fm.f(cc))))
+        }
+
+        result.value
+      }
+    })
   }
 }
 
@@ -93,6 +115,7 @@ object IxFree {
       fa flatMap f
     def pure[F, A](a: A): IxFree[S, F, F, A] =
       pure(a)
-    def tailRecM[F, A, B](a: A)(f: A => IxFree[S, F, F, Either[A, B]]): IxFree[S, F, F, B] = ??? // TODO
+    def tailRecM[Z[_, _, _], F, T, A, B](a: Z[F, T, A])(f: FunctionTr[Z, IxFree[S, ?, ?, ?], A, B])(implicit Z: IxMonad[Z]): IxFree[S, F, T, B] =
+      defaultTailRecM(a)(f)
   }
 }
