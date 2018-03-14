@@ -18,48 +18,12 @@ package com.example
 
 import cats.effect.IO
 
-/** From Idris States */
-object doorWithIxFree extends App {
-
-  sealed trait Open
-  sealed trait Closed
-
-  sealed trait DoorOp[F, T, A]
-  final case object OpenDoor extends DoorOp[Closed, Open, Unit]
-  final case object CloseDoor extends DoorOp[Open, Closed, Unit]
-  final case object Knock extends DoorOp[Closed, Closed, Unit]
-
-  type DoorSm[F, T, A] = IxFree[DoorOp, F, T, A]
-
-  val open: DoorSm[Closed, Open, Unit] =
-    IxFree.liftF(OpenDoor)
-  val close: DoorSm[Open, Closed, Unit] =
-    IxFree.liftF(CloseDoor)
-  val knock: DoorSm[Closed, Closed, Unit] =
-    IxFree.liftF(Knock)
-
-  val interp: FunctionX[DoorOp, IxMonad.Fake[IO]#λ] = new FunctionX[DoorOp, IxMonad.Fake[IO]#λ] {
-    override def apply[F, T, A](d: DoorOp[F, T, A]): IO[A] = d match {
-      case OpenDoor => IO(println("Opening door ..."))
-      case CloseDoor => IO(println("Closing door ..."))
-      case Knock => IO(println("Knock-knock!"))
-    }
-  }
-
-  val prog: DoorSm[Closed, Closed, Int] = for {
-    _ <- knock
-    _ <- open
-    _ <- close
-  } yield 8
-
-  val tsk: IO[Int] =
-    prog.foldMap[IxMonad.Fake[IO]#λ](interp)(IxMonad.ixMonadFromMonad[IO])
-
-  println(tsk.unsafeRunSync())
+sealed trait SmExample extends AbstractExample {
+  def tsk: IO[Any]
 }
 
 /** From Idris States */
-object doorWithSm extends App {
+object doorWithSm extends SmExample {
 
   sealed trait Open
   sealed trait Closed
@@ -99,12 +63,10 @@ object doorWithSm extends App {
   } yield 8
 
   val tsk: IO[Int] = prog.run[IO, Const[Unit]#λ]
-
-  println(tsk.unsafeRunSync())
 }
 
 /** From http://alcestes.github.io/lchannels/ */
-object atmCh extends App {
+object atmCh extends SmExample {
 
   import akka.typed._
   import akka.typed.scaladsl._
@@ -223,22 +185,20 @@ object atmCh extends App {
     }
   }
 
-  def test(): Int = {
-    val sys = ActorSystem(mock1, "mock")
-    val entry = ActRef[msgs.Authenticate](sys)(sys.scheduler)
-    implicit val i: Sm.Execute.Aux[AtmOp, IO, ActRef, msgs.Authenticate, msgs.Authenticate] = interp(entry)
-    try {
-      prog.run[IO, ActRef].unsafeRunSync()
-    } finally {
-      sys.terminate()
+  val tsk: IO[Int] = for {
+    sys <- IO { ActorSystem(mock1, "mock") }
+    entry = ActRef[msgs.Authenticate](sys)(sys.scheduler)
+    maybeResult <- {
+      implicit val i: Sm.Execute.Aux[AtmOp, IO, ActRef, msgs.Authenticate, msgs.Authenticate] = interp(entry)
+      prog.run[IO, ActRef].attempt
     }
-  }
-
-  println(test())
+    _ <- IO { sys.terminate() }
+    result <- IO.fromEither(maybeResult)
+  } yield result
 }
 
 /** From http://alcestes.github.io/lchannels/ */
-object atm extends App {
+object atm extends SmExample {
 
   sealed trait NotAuthenticated
   sealed trait Authenticated
@@ -296,12 +256,14 @@ object atm extends App {
   val tsk1: IO[Int] = goodPin.run[IO, Const[Unit]#λ]
   val tsk2: IO[Int] = badPin.run[IO, Const[Unit]#λ]
 
-  println(tsk1.unsafeRunSync())
-  println(tsk2.unsafeRunSync())
+  val tsk: IO[(Option[Int], Option[Int])] = for {
+    r1 <- tsk1.attempt
+    r2 <- tsk2.attempt
+  } yield (r1.toOption, r2.toOption)
 }
 
 /** From Idris States */
-object varRef extends App {
+object varRef extends SmExample {
 
   sealed trait VarOp[F, T, A]
   final case class Get[A]() extends VarOp[A, A, A]
@@ -334,5 +296,6 @@ object varRef extends App {
     f <- get
   } yield if (b) f else 4.5
 
-  println(prog.run[IO, cats.Id].unsafeRunSync())
+  val tsk: IO[Double] =
+    prog.run[IO, cats.Id]
 }
