@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2017-2018 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,18 @@
  * limitations under the License.
  */
 
-package com
+package com.example
 
-package object example {
+sealed trait HTree
 
-  type Const[C] = {
-    type λ[x] = C
-  }
+sealed trait HNil extends HTree
 
-  type ::[H, T <: HTree] = HCons {
-    type Head = H
-    type Tail = T
-  }
+sealed trait HCons extends HTree {
+  type Head
+  type Tail <: HTree
+}
 
-  type :+:[L <: HTree, R <: HTree] = HFork {
-    type Left = L
-    type Right = R
-  }
+sealed trait HFork extends HTree {
+  type Left <: HTree
+  type Right <: HTree
 }
