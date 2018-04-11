@@ -22,6 +22,8 @@ import cats.Monad
 import cats.implicits._
 import cats.data.IndexedStateT
 
+final class evidence extends deprecated("this parameter is only used as evidence", "")
+
 trait FunctionX[F[_, _, _], G[_, _, _]] {
   def apply[A, B, C](x: F[A, B, C]): G[A, B, C]
 }

@@ -53,17 +53,32 @@ object St {
     type λ[i <: HTree] = x :: i
   }
 
-  sealed trait Label[A] {
-    type Lb <: Label[A]
-    def delete: St.Aux[Unit, Prepend[Delete[Lb]]#λ]
+  sealed abstract class Label[R[_]] {
+    type Lb <: Label[R]
+    def delete: St.Aux[Unit, Prepend[Delete[R, Lb]]#λ]
+    def read[S]: St.Aux[R[S], Prepend[InState[R, S, Lb]]#λ]
+    def write[T](r: R[T]): St.Aux[Unit, Prepend[Move[R, T, Lb]]#λ]
   }
 
-  sealed trait Create[L <: Label[_]] {
+  sealed trait NotCreated
+  sealed trait Destroyed
+
+  sealed trait Move[R[_], S, L <: Label[R]] {
     type Lb = L
   }
 
-  sealed trait Delete[L <: Label[_]] {
+  sealed trait InState[R[_], S, L <: Label[R]] {
     type Lb = L
+  }
+
+  type Create[R[_], S, L <: Label[R]] = Move[R, S, L]
+
+  type Delete[R[_], L <: Label[R]] = Move[R, Destroyed, L]
+
+  object Api {
+    trait Initial[R[_], S]
+    trait Final[R[_], S]
+    trait Transition[R[_], F, T]
   }
 
   // TODO: can we reuse Free?
@@ -92,31 +107,58 @@ object St {
     }
   }
 
-  private[St] final case class Mk[A, L <: Label[A] { type Lb = L }](resource: A, label: L) extends StImpl[L] {
-    final type Out[In <: HTree] = Prepend[Create[L]]#λ[In]
+  private[St] final case class Mk[R[_], S, L <: Label[R] { type Lb = L }](label: L) extends StImpl[L] {
+    final type Out[In <: HTree] = Prepend[Create[R, S, L]]#λ[In]
   }
 
-  private[St] final case class Del[A, L <: Label[A] with Singleton](label: L) extends StImpl[Unit] {
-    final type Out[In <: HTree] = Prepend[Delete[L#Lb]]#λ[In]
+  private[St] final case class Del[R[_], L <: Label[R] with Singleton](label: L) extends StImpl[Unit] {
+    final type Out[In <: HTree] = Prepend[Delete[R, L#Lb]]#λ[In]
+  }
+
+  private[St] final case class Rd[R[_], S, L <: Label[R] with Singleton](label: L) extends St[R[S]] { self =>
+
+    final type Res = R[S]
+
+    final type Out[In <: HTree] = Prepend[InState[R, S, L#Lb]]#λ[In]
+
+    protected final override def unwrap: St.Aux[Res, self.Out] =
+      self
+  }
+
+  // TODO: rename to `Wr`
+  private[St] final case class Mv[R[_], T, L <: Label[R] { type Lb = L }](label: L, value: R[T]) extends StImpl[Unit] {
+    final type Out[In <: HTree] = Prepend[Move[R, T, L]]#λ[In]
   }
 
   def pure[A](a: A): St.Aux[A, Identity#λ] =
     Pure(a)
 
-  // TODO: specify `resource` in a monad?
-  // TODO: constrain to initial states
-  def create[A](resource: A): St.Aux[L, Prepend[Create[L]]#λ] forSome { type L <: Label[A] { type Lb = L } } = {
-    val l = new Label[A] {
+  // TODO: infer `S`
+  def create[R[_], S](implicit @evidence ev: Api.Initial[R, S]): St.Aux[L, Prepend[Create[R, S, L]]#λ] forSome { type L <: Label[R] { type Lb = L } } = {
+    val l = new Label[R] {
       type Lb = this.type
-      final override def delete: St.Aux[Unit, Prepend[Delete[Lb]]#λ] = Del[A, this.type](this)
+      final override def delete: St.Aux[Unit, Prepend[Delete[R, Lb]]#λ] = Del[R, this.type](this)
+      final override def read[S1] = Rd[R, S1, this.type](this)
+      final override def write[T1](r: R[T1]) = Mv[R, T1, this.type](this, r)
     }
-    Mk[A, l.type](resource, l)
+    Mk[R, S, l.type](l)
   }
 
   // TODO: constrain to final states
   // FIXME: type inference is bad for this
-  def delete[A, L <: Label[A] { type Lb = L }](label: L): St.Aux[Unit, Prepend[Delete[label.Lb]]#λ] =
-    Del[A, label.type](label)
+  // FIXME: do we need this? The one on `Label` should be enough ...
+  def delete[R[_], L <: Label[R] { type Lb = L }](label: L): St.Aux[Unit, Prepend[Delete[R, label.Lb]]#λ] =
+    Del[R, label.type](label)
+
+  // Type classes for consistency checking:
+
+  sealed abstract class WellFormed[T <: HTree] // TODO
+
+  // Execution:
+
+  // TODO: parameterized effect type
+  def run[A](st: St[A])(implicit @evidence ev: WellFormed[st.Out[HNil]]): IO[A] =
+    interpreter(st)
 
   // TODO: stack safety, parameterized effect type, force constraints, ...
   def interpreter: St ~> IO = new ~>[St, IO] {
@@ -127,13 +169,17 @@ object St {
         apply(fm.st).flatMap { a =>
           apply(fm.func(a))
         }
-      case mk @ Mk(_, _) =>
+      case mk @ Mk(_) =>
         IO.pure(mk.label)
       case Del(label) =>
         IO {
           // TODO: deleting
           ()
         }
+      case Rd(_) =>
+        ??? // TODO
+      case Mv(_, _) =>
+        ??? // TODO
     }
   }
 }
