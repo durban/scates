@@ -42,7 +42,12 @@ sealed abstract class St[+A] { self =>
 object St {
 
   type Aux[A, O[_ <: HTree] <: HTree] = St[A] {
-    type Out[In <: HTree] = O[In] // maybe `<:`?
+    // Note: when using `... = O[In]`, some
+    // long for-comprehensions with multiple
+    // labels fail (scalac seems to get confused
+    // with the various `Lb`s). Using `<:` seems
+    // to fix this.
+    type Out[In <: HTree] <: O[In]
   }
 
   type Identity = {
@@ -53,32 +58,39 @@ object St {
     type λ[i <: HTree] = x :: i
   }
 
-  sealed abstract class Label[R[_]] {
-    type Lb <: Label[R]
-    def delete: St.Aux[Unit, Prepend[Delete[R, Lb]]#λ]
-    def read[S]: St.Aux[R[S], Prepend[InState[R, S, Lb]]#λ]
-    def write[T](r: R[T]): St.Aux[Unit, Prepend[Move[R, T, Lb]]#λ]
+  type Prepend2[x, y] = {
+    type λ[i <: HTree] = x :: y :: i
+  }
+
+  sealed abstract class Label {
+    type Lb <: Label
+    type Res[_]
+    def delete: St.Aux[Unit, Prepend[Delete[this.Lb]]#λ]
+    def read[S]: St.Aux[this.Res[S], Prepend[InState[S, this.Lb]]#λ]
+    def write[T](r: Res[T]): St.Aux[Unit, Prepend[Move[T, this.Lb]]#λ]
   }
 
   sealed trait NotCreated
   sealed trait Destroyed
 
-  sealed trait Move[R[_], S, L <: Label[R]] {
+  sealed trait HtEntry[L <: Label]
+
+  sealed trait Move[S, L <: Label] extends HtEntry[L] {
     type Lb = L
   }
 
-  sealed trait InState[R[_], S, L <: Label[R]] {
+  sealed trait InState[S, L <: Label] extends HtEntry[L] {
     type Lb = L
   }
 
-  type Create[R[_], S, L <: Label[R]] = Move[R, S, L]
+  type Create[S, L <: Label] = Move[S, L]
 
-  type Delete[R[_], L <: Label[R]] = Move[R, Destroyed, L]
+  type Delete[L <: Label] = Move[Destroyed, L]
 
   object Api {
     trait Initial[R[_], S]
-    trait Final[R[_], S]
     trait Transition[R[_], F, T]
+    type Final[R[_], S] = Transition[R, S, Destroyed]
   }
 
   // TODO: can we reuse Free?
@@ -107,48 +119,45 @@ object St {
     }
   }
 
-  private[St] final case class Mk[R[_], S, L <: Label[R] { type Lb = L }](label: L) extends StImpl[L] {
-    final type Out[In <: HTree] = Prepend[Create[R, S, L]]#λ[In]
+  private[St] final case class Mk[S, L <: Label with Singleton](label: L) extends StImpl[L] {
+    final type Out[In <: HTree] = Prepend[Create[S, L]]#λ[In]
   }
 
-  private[St] final case class Del[R[_], L <: Label[R] with Singleton](label: L) extends StImpl[Unit] {
-    final type Out[In <: HTree] = Prepend[Delete[R, L#Lb]]#λ[In]
+  private[St] final case class Del[L <: Label with Singleton](label: L) extends StImpl[Unit] {
+    final type Out[In <: HTree] = Prepend[Delete[L]]#λ[In]
   }
 
-  private[St] final case class Rd[R[_], S, L <: Label[R] with Singleton](label: L) extends St[R[S]] { self =>
+  private[St] final case class Rd[S, L <: Label with Singleton](label: L) extends St[L#Res[S]] { self =>
 
-    final type Res = R[S]
+    final type Res = L#Res[S]
 
-    final type Out[In <: HTree] = Prepend[InState[R, S, L#Lb]]#λ[In]
+    final type Out[In <: HTree] = Prepend[InState[S, L]]#λ[In]
 
     protected final override def unwrap: St.Aux[Res, self.Out] =
       self
   }
 
   // TODO: rename to `Wr`
-  private[St] final case class Mv[R[_], T, L <: Label[R] { type Lb = L }](label: L, value: R[T]) extends StImpl[Unit] {
-    final type Out[In <: HTree] = Prepend[Move[R, T, L]]#λ[In]
+  private[St] final case class Mv[T, L <: Label with Singleton](label: L, value: L#Res[T]) extends StImpl[Unit] {
+    final type Out[In <: HTree] = Prepend[Move[T, L]]#λ[In]
   }
 
   def pure[A](a: A): St.Aux[A, Identity#λ] =
     Pure(a)
 
   // TODO: infer `S`
-  def create[R[_], S](implicit @evidence ev: Api.Initial[R, S]): St.Aux[L, Prepend[Create[R, S, L]]#λ] forSome { type L <: Label[R] { type Lb = L } } = {
-    val l = new Label[R] {
+  def create[R[_], S](
+    implicit @evidence ev: Api.Initial[R, S]
+  ): St.Aux[L, Prepend[Create[S, L]]#λ] forSome { type L <: Label with Singleton { type Lb = L; type Res[x] = R[x] } } = {
+    val l = new Label {
       type Lb = this.type
-      final override def delete: St.Aux[Unit, Prepend[Delete[R, Lb]]#λ] = Del[R, this.type](this)
-      final override def read[S1] = Rd[R, S1, this.type](this)
-      final override def write[T1](r: R[T1]) = Mv[R, T1, this.type](this, r)
+      type Res[x] = R[x]
+      final override def delete: St.Aux[Unit, Prepend[Delete[this.type]]#λ] = Del[this.type](this)
+      final override def read[S1] = Rd[S1, this.type](this)
+      final override def write[T1](r: R[T1]) = Mv[T1, this.type](this, r)
     }
-    Mk[R, S, l.type](l)
+    Mk[S, l.type](l)
   }
-
-  // TODO: constrain to final states
-  // FIXME: type inference is bad for this
-  // FIXME: do we need this? The one on `Label` should be enough ...
-  def delete[R[_], L <: Label[R] { type Lb = L }](label: L): St.Aux[Unit, Prepend[Delete[R, label.Lb]]#λ] =
-    Del[R, label.type](label)
 
   // Type classes for consistency checking:
 
@@ -158,6 +167,9 @@ object St {
 
   // TODO: parameterized effect type
   def run[A](st: St[A])(implicit @evidence ev: WellFormed[st.Out[HNil]]): IO[A] =
+    interpreter(st)
+
+  def unsafeRun[A](st: St[A]): IO[A] =
     interpreter(st)
 
   // TODO: stack safety, parameterized effect type, force constraints, ...

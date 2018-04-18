@@ -20,12 +20,14 @@ sealed trait HTree
 
 sealed trait HNil extends HTree
 
-sealed trait HCons extends HTree {
-  type Head
-  type Tail <: HTree
+sealed trait ::[H, T <: HTree] extends HTree {
+  // FIXME: do we need these?
+  type Head = H
+  type Tail = T
 }
 
-sealed trait HFork extends HTree {
-  type Left <: HTree
-  type Right <: HTree
+sealed trait :+:[L <: HTree, R <: HTree] extends HTree {
+  // FIXME: do we need these?
+  type Left = L
+  type Right = R
 }

@@ -21,14 +21,4 @@ package object example {
   type Const[C] = {
     type λ[x] = C
   }
-
-  type ::[H, T <: HTree] = HCons {
-    type Head = H
-    type Tail = T
-  }
-
-  type :+:[L <: HTree, R <: HTree] = HFork {
-    type Left = L
-    type Right = R
-  }
 }

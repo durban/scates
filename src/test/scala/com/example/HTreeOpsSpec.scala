@@ -16,6 +16,8 @@
 
 package com.example
 
+import scala.language.existentials
+
 import shapeless.test.illTyped
 
 import HTreeOps._
@@ -31,98 +33,110 @@ final object HTreeOpsSpec {
 
     implicit def intToByte: St.Api.Transition[Rs1, Int, Byte] =
       new St.Api.Transition[Rs1, Int, Byte] {}
+
+    implicit def finInt: St.Api.Final[Rs1, Int] =
+      new St.Api.Transition[Rs1, Int, St.Destroyed] {}
   }
 
   final class Rs2[A]
 
-  val l: St.Label[Rs1] { type Lb = this.type } = null
-  val m: St.Label[Rs2] { type Lb = this.type } = null
+  final object Rs2 {
+    implicit def initInt: St.Api.Initial[Rs2, Int] =
+      new St.Api.Initial[Rs2, Int] {}
+  }
+
+  sealed trait Phantom
+
+  val l = St.unsafeRun(St.create[Rs1, Int]).unsafeRunSync()
+  implicitly[l.Res[Phantom] =:= Rs1[Phantom]]
+
+  val m = St.unsafeRun(St.create[Rs2, Int]).unsafeRunSync()
+  implicitly[m.Res[Phantom] =:= Rs2[Phantom]]
 
   final object filter {
 
-    val f1 = Filter[HNil, Rs1, l.Lb]
+    val f1 = Filter[HNil, l.type]
     implicitly[f1.Out =:= HNil]
     implicitly[f1.Rest =:= HNil]
 
-    val f2 = Filter[St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]
-    implicitly[f2.Out =:= (St.Move[Rs1, Int, l.Lb] :: HNil)]
+    val f2 = Filter[St.Move[Int, l.type] :: HNil, l.type]
+    implicitly[f2.Out =:= (St.Move[Int, l.type] :: HNil)]
     implicitly[f2.Rest =:= HNil]
 
-    val f3 = Filter[St.Move[Rs2, Int, m.Lb] :: HNil, Rs1, l.Lb]
+    val f3 = Filter[St.Move[Int, m.type] :: HNil, l.type]
     implicitly[f3.Out =:= HNil]
-    implicitly[f3.Rest =:= (St.Move[Rs2, Int, m.Lb] :: HNil)]
+    implicitly[f3.Rest =:= (St.Move[Int, m.type] :: HNil)]
 
-    val f4 = Filter[St.Move[Rs2, Int, m.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]
-    implicitly[f4.Out =:= (St.Move[Rs1, Int, l.Lb] :: HNil)]
-    implicitly[f4.Rest =:= (St.Move[Rs2, Int, m.Lb] :: HNil)]
+    val f4 = Filter[St.Move[Int, m.type] :: St.Move[Int, l.type] :: HNil, l.type]
+    implicitly[f4.Out =:= (St.Move[Int, l.type] :: HNil)]
+    implicitly[f4.Rest =:= (St.Move[Int, m.type] :: HNil)]
 
-    val f5 = Filter[St.Move[Rs1, Float, l.Lb] :: St.Move[Rs2, Int, m.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]
-    implicitly[f5.Out =:= (St.Move[Rs1, Float, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil)]
-    implicitly[f5.Rest =:= (St.Move[Rs2, Int, m.Lb] :: HNil)]
+    val f5 = Filter[St.Move[Float, l.type] :: St.Move[Int, m.type] :: St.Move[Int, l.type] :: HNil, l.type]
+    implicitly[f5.Out =:= (St.Move[Float, l.type] :: St.Move[Int, l.type] :: HNil)]
+    implicitly[f5.Rest =:= (St.Move[Int, m.type] :: HNil)]
 
-    val f6 = Filter[St.InState[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]
-    implicitly[f6.Out =:= (St.InState[Rs1, Int, l.Lb] :: HNil)]
+    val f6 = Filter[St.InState[Int, l.type] :: HNil, l.type]
+    implicitly[f6.Out =:= (St.InState[Int, l.type] :: HNil)]
     implicitly[f6.Rest =:= HNil]
 
-    val f7 = Filter[St.InState[Rs2, Int, m.Lb] :: HNil, Rs1, l.Lb]
+    val f7 = Filter[St.InState[Int, m.type] :: HNil, l.type]
     implicitly[f7.Out =:= HNil]
-    implicitly[f7.Rest =:= (St.InState[Rs2, Int, m.Lb] :: HNil)]
+    implicitly[f7.Rest =:= (St.InState[Int, m.type] :: HNil)]
 
-    val f8 = Filter[St.Move[Rs2, Int, m.Lb] :: St.InState[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]
-    implicitly[f8.Out =:= (St.InState[Rs1, Int, l.Lb] :: HNil)]
-    implicitly[f8.Rest =:= (St.Move[Rs2, Int, m.Lb] :: HNil)]
+    val f8 = Filter[St.Move[Int, m.type] :: St.InState[Int, l.type] :: HNil, l.type]
+    implicitly[f8.Out =:= (St.InState[Int, l.type] :: HNil)]
+    implicitly[f8.Rest =:= (St.Move[Int, m.type] :: HNil)]
 
-    val f9 = Filter[St.Move[Rs1, Float, l.Lb] :: St.Move[Rs2, Int, m.Lb] :: St.InState[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]
-    implicitly[f9.Out =:= (St.Move[Rs1, Float, l.Lb] :: St.InState[Rs1, Int, l.Lb] :: HNil)]
-    implicitly[f9.Rest =:= (St.Move[Rs2, Int, m.Lb] :: HNil)]
+    val f9 = Filter[St.Move[Float, l.type] :: St.Move[Int, m.type] :: St.InState[Int, l.type] :: HNil, l.type]
+    implicitly[f9.Out =:= (St.Move[Float, l.type] :: St.InState[Int, l.type] :: HNil)]
+    implicitly[f9.Rest =:= (St.Move[Int, m.type] :: HNil)]
 
-    val f10 = Filter[HNil :+: HNil, Rs1, l.Lb]
+    val f10 = Filter[HNil :+: HNil, l.type]
     implicitly[f10.Out =:= (HNil :+: HNil)]
     implicitly[f10.Rest =:= (HNil :+: HNil)]
 
-    val f11 = Filter[(St.Move[Rs1, Int, l.Lb] :: HNil) :+: HNil, Rs1, l.Lb]
-    implicitly[f11.Out =:= ((St.Move[Rs1, Int, l.Lb] :: HNil) :+: HNil)]
+    val f11 = Filter[(St.Move[Int, l.type] :: HNil) :+: HNil, l.type]
+    implicitly[f11.Out =:= ((St.Move[Int, l.type] :: HNil) :+: HNil)]
     implicitly[f11.Rest =:= (HNil :+: HNil)]
 
-    val f12 = Filter[(St.Move[Rs2, Int, m.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil) :+: HNil, Rs1, l.Lb]
-    implicitly[f12.Out =:= ((St.Move[Rs1, Int, l.Lb] :: HNil) :+: HNil)]
-    implicitly[f12.Rest =:= ((St.Move[Rs2, Int, m.Lb] :: HNil) :+: HNil)]
+    val f12 = Filter[(St.Move[Int, m.type] :: St.Move[Int, l.type] :: HNil) :+: HNil, l.type]
+    implicitly[f12.Out =:= ((St.Move[Int, l.type] :: HNil) :+: HNil)]
+    implicitly[f12.Rest =:= ((St.Move[Int, m.type] :: HNil) :+: HNil)]
 
-    val f13 = Filter[(St.Move[Rs2, Int, m.Lb] :: St.InState[Rs1, Int, l.Lb] :: HNil) :+: HNil, Rs1, l.Lb]
-    implicitly[f13.Out =:= ((St.InState[Rs1, Int, l.Lb] :: HNil) :+: HNil)]
-    implicitly[f13.Rest =:= ((St.Move[Rs2, Int, m.Lb] :: HNil) :+: HNil)]
+    val f13 = Filter[(St.Move[Int, m.type] :: St.InState[Int, l.type] :: HNil) :+: HNil, l.type]
+    implicitly[f13.Out =:= ((St.InState[Int, l.type] :: HNil) :+: HNil)]
+    implicitly[f13.Rest =:= ((St.Move[Int, m.type] :: HNil) :+: HNil)]
 
-    val f14 = Filter[(St.Move[Rs2, Int, m.Lb] :: St.InState[Rs1, Int, l.Lb] :: HNil) :+: (St.Move[Rs1, Float, l.Lb] :: HNil), Rs1, l.Lb]
-    implicitly[f14.Out =:= ((St.InState[Rs1, Int, l.Lb] :: HNil) :+: (St.Move[Rs1, Float, l.Lb] :: HNil))]
-    implicitly[f14.Rest =:= ((St.Move[Rs2, Int, m.Lb] :: HNil) :+: HNil)]
+    val f14 = Filter[(St.Move[Int, m.type] :: St.InState[Int, l.type] :: HNil) :+: (St.Move[Float, l.type] :: HNil), l.type]
+    implicitly[f14.Out =:= ((St.InState[Int, l.type] :: HNil) :+: (St.Move[Float, l.type] :: HNil))]
+    implicitly[f14.Rest =:= ((St.Move[Int, m.type] :: HNil) :+: HNil)]
 
-    val f15 = Filter[(St.Move[Rs2, Int, m.Lb] :: St.InState[Rs1, Int, l.Lb] :: HNil) :+: (St.InState[Rs2, Boolean, m.Lb] :: St.Move[Rs1, Float, l.Lb] :: HNil), Rs1, l.Lb]
-    implicitly[f15.Out =:= ((St.InState[Rs1, Int, l.Lb] :: HNil) :+: (St.Move[Rs1, Float, l.Lb] :: HNil))]
-    implicitly[f15.Rest =:= ((St.Move[Rs2, Int, m.Lb] :: HNil) :+: (St.InState[Rs2, Boolean, m.Lb] :: HNil))]
+    val f15 = Filter[(St.Move[Int, m.type] :: St.InState[Int, l.type] :: HNil) :+: (St.InState[Boolean, m.type] :: St.Move[Float, l.type] :: HNil), l.type]
+    implicitly[f15.Out =:= ((St.InState[Int, l.type] :: HNil) :+: (St.Move[Float, l.type] :: HNil))]
+    implicitly[f15.Rest =:= ((St.Move[Int, m.type] :: HNil) :+: (St.InState[Boolean, m.type] :: HNil))]
 
     val f16 = Filter[
       (
         (
-          (St.InState[Rs1, Float, l.Lb] :: St.Move[Rs1, Float, l.Lb] :: HNil) :+:
-          (St.Move[Rs1, Float, l.Lb] :: St.Move[Rs2, Double, m.Lb] :: HNil)
+          (St.InState[Float, l.type] :: St.Move[Float, l.type] :: HNil) :+:
+          (St.Move[Float, l.type] :: St.Move[Double, m.type] :: HNil)
         ) :+:
         (
-          (St.InState[Rs2, Float, m.Lb] :: St.Move[Rs2, Float, m.Lb] :: St.Move[Rs1, Float, l.Lb] :: HNil) :+:
-          (St.InState[Rs2, Float, m.Lb] :: HNil)
+          (St.InState[Float, m.type] :: St.Move[Float, m.type] :: St.Move[Float, l.type] :: HNil) :+:
+          (St.InState[Float, m.type] :: HNil)
         )
       ),
-      Rs1,
-      l.Lb
+      l.type
     ]
     implicitly[
       f16.Out =:=
       (
         (
-          (St.InState[Rs1, Float, l.Lb] :: St.Move[Rs1, Float, l.Lb] :: HNil) :+:
-          (St.Move[Rs1, Float, l.Lb] :: HNil)
+          (St.InState[Float, l.type] :: St.Move[Float, l.type] :: HNil) :+:
+          (St.Move[Float, l.type] :: HNil)
         ) :+:
         (
-          (St.Move[Rs1, Float, l.Lb] :: HNil) :+:
+          (St.Move[Float, l.type] :: HNil) :+:
           (HNil)
         )
       )
@@ -132,11 +146,11 @@ final object HTreeOpsSpec {
       (
         (
           (HNil) :+:
-          (St.Move[Rs2, Double, m.Lb] :: HNil)
+          (St.Move[Double, m.type] :: HNil)
         ) :+:
         (
-          (St.InState[Rs2, Float, m.Lb] :: St.Move[Rs2, Float, m.Lb] :: HNil) :+:
-          (St.InState[Rs2, Float, m.Lb] :: HNil)
+          (St.InState[Float, m.type] :: St.Move[Float, m.type] :: HNil) :+:
+          (St.InState[Float, m.type] :: HNil)
         )
       )
     ]
@@ -144,57 +158,81 @@ final object HTreeOpsSpec {
 
   final object destroyedAtEnd {
 
-    val d1 = DestroyedAtEnd[St.Delete[Rs1, l.Lb] :: HNil, Rs1, l.Lb]
-    implicitly[d1.Out =:= HNil]
+    DestroyedAtEnd[St.Delete[l.type] :: HNil, l.type]
+    DestroyedAtEnd[St.Delete[l.type] :: St.Move[Int, l.type] :: HNil, l.type]
+    DestroyedAtEnd[(St.Delete[l.type] :: St.Move[Int, l.type] :: HNil) :+: (St.Delete[l.type] :: HNil), l.type]
 
-    val d2 = DestroyedAtEnd[St.Delete[Rs1, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]
-    implicitly[d2.Out =:= (St.Move[Rs1, Int, l.Lb] :: HNil)]
-
-    val d3 = DestroyedAtEnd[(St.Delete[Rs1, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil) :+: (St.Delete[Rs1, l.Lb] :: HNil), Rs1, l.Lb]
-    implicitly[d3.Out =:= ((St.Move[Rs1, Int, l.Lb] :: HNil) :+: HNil)]
-
-    illTyped("""DestroyedAtEnd[HNil, Rs1, l.Lb]""", "could not find implicit value for parameter.*")
-    illTyped("""DestroyedAtEnd[St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]""", "could not find implicit value for parameter.*")
-    illTyped("""DestroyedAtEnd[St.InState[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]""", "could not find implicit value for parameter.*")
-    illTyped("""DestroyedAtEnd[(St.Move[Rs1, Int, l.Lb] :: HNil) :+: (St.Delete[Rs1, l.Lb] :: HNil), Rs1, l.Lb]""", "could not find implicit value for parameter.*")
-    illTyped("""DestroyedAtEnd[((St.Delete[Rs1, l.Lb] :: HNil) :+: (St.Move[Rs1, Int, l.Lb] :: HNil)) :+: (St.Delete[Rs1, l.Lb] :: HNil), Rs1, l.Lb]""", "could not find implicit value for parameter.*")
+    illTyped("""DestroyedAtEnd[HNil, l.type]""", "could not find implicit value for parameter.*")
+    illTyped("""DestroyedAtEnd[St.Move[Int, l.type] :: HNil, l.type]""", "could not find implicit value for parameter.*")
+    illTyped("""DestroyedAtEnd[St.InState[Int, l.type] :: HNil, l.type]""", "could not find implicit value for parameter.*")
+    illTyped("""DestroyedAtEnd[(St.Move[Int, l.type] :: HNil) :+: (St.Delete[l.type] :: HNil), l.type]""", "could not find implicit value for parameter.*")
+    illTyped("""DestroyedAtEnd[((St.Delete[l.type] :: HNil) :+: (St.Move[Int, l.type] :: HNil)) :+: (St.Delete[l.type] :: HNil), l.type]""", "could not find implicit value for parameter.*")
   }
 
   final object takesCorrectSteps {
 
-    TakesCorrectSteps[HNil, Rs1, l.Lb]
-    TakesCorrectSteps[St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]
-    illTyped("""TakesCorrectSteps[St.Move[Rs1, Float, l.Lb] :: HNil, Rs1, l.Lb]""", "could not find implicit value for parameter.*")
-    illTyped("""TakesCorrectSteps[St.InState[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]""", "could not find implicit value for parameter.*")
-    illTyped("""TakesCorrectSteps[St.InState[Rs1, Byte, l.Lb] :: St.InState[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]""", "could not find implicit value for parameter.*")
-    illTyped("""TakesCorrectSteps[(HNil) :+: (St.InState[Rs1, Byte, l.Lb] :: St.InState[Rs1, Int, l.Lb] :: HNil), Rs1, l.Lb]""", "could not find implicit value for parameter.*")
+    TakesCorrectSteps[HNil, l.type]
+    TakesCorrectSteps[St.Move[Int, l.type] :: HNil, l.type]
+    illTyped("""TakesCorrectSteps[St.Move[Float, l.type] :: HNil, l.type]""", "could not find implicit value for parameter.*")
+    illTyped("""TakesCorrectSteps[St.InState[Int, l.type] :: HNil, l.type]""", "could not find implicit value for parameter.*")
+    illTyped("""TakesCorrectSteps[St.InState[Byte, l.type] :: St.InState[Int, l.type] :: HNil, l.type]""", "could not find implicit value for parameter.*")
+    illTyped("""TakesCorrectSteps[(HNil) :+: (St.InState[Byte, l.type] :: St.InState[Int, l.type] :: HNil), l.type]""", "could not find implicit value for parameter.*")
 
-    TakesCorrectSteps[St.InState[Rs1, Int, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]
-    illTyped("""TakesCorrectSteps[St.InState[Rs1, Float, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]""", "could not find implicit value for parameter.*")
+    TakesCorrectSteps[St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil, l.type]
+    illTyped("""TakesCorrectSteps[St.InState[Float, l.type] :: St.Move[Int, l.type] :: HNil, l.type]""", "could not find implicit value for parameter.*")
 
-    TakesCorrectSteps[St.Move[Rs1, Byte, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]
-    illTyped("""TakesCorrectSteps[St.Move[Rs1, Float, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]""", "could not find implicit value for parameter.*")
+    TakesCorrectSteps[St.Move[Byte, l.type] :: St.Move[Int, l.type] :: HNil, l.type]
+    illTyped("""TakesCorrectSteps[St.Move[Float, l.type] :: St.Move[Int, l.type] :: HNil, l.type]""", "could not find implicit value for parameter.*")
 
-    TakesCorrectSteps[St.Move[Rs1, Byte, l.Lb] :: St.InState[Rs1, Int, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]
-    illTyped("""TakesCorrectSteps[St.Move[Rs1, Float, l.Lb] :: St.InState[Rs1, Int, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]""", "could not find implicit value for parameter.*")
+    TakesCorrectSteps[St.Move[Byte, l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil, l.type]
+    illTyped("""TakesCorrectSteps[St.Move[Float, l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil, l.type]""", "could not find implicit value for parameter.*")
 
-    TakesCorrectSteps[St.InState[Rs1, Int, l.Lb] :: St.InState[Rs1, Int, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]
-    illTyped("""TakesCorrectSteps[St.InState[Rs1, Byte, l.Lb] :: St.InState[Rs1, Int, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil, Rs1, l.Lb]""", "could not find implicit value for parameter.*")
+    TakesCorrectSteps[St.InState[Int, l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil, l.type]
+    illTyped("""TakesCorrectSteps[St.InState[Byte, l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil, l.type]""", "could not find implicit value for parameter.*")
 
-    TakesCorrectSteps[HNil :+: HNil, Rs1, l.Lb]
-    TakesCorrectSteps[(St.Move[Rs1, Int, l.Lb] :: HNil) :+: HNil, Rs1, l.Lb]
-    TakesCorrectSteps[(St.Move[Rs1, Int, l.Lb] :: HNil) :+: (St.InState[Rs1, Int, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil), Rs1, l.Lb]
-    illTyped("""TakesCorrectSteps[HNil :+: (St.Move[Rs1, Float, l.Lb] :: HNil), Rs1, l.Lb]""", "could not find implicit value for parameter.*")
-    illTyped("""TakesCorrectSteps[HNil :+: (St.InState[Rs1, Int, l.Lb] :: HNil), Rs1, l.Lb]""", "could not find implicit value for parameter.*")
-    illTyped("""TakesCorrectSteps[(St.Move[Rs1, Int, l.Lb] :: HNil) :+: (St.InState[Rs1, Byte, l.Lb] :: St.InState[Rs1, Int, l.Lb] :: HNil), Rs1, l.Lb]""", "could not find implicit value for parameter.*")
+    TakesCorrectSteps[HNil :+: HNil, l.type]
+    TakesCorrectSteps[(St.Move[Int, l.type] :: HNil) :+: HNil, l.type]
+    TakesCorrectSteps[(St.Move[Int, l.type] :: HNil) :+: (St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil), l.type]
+    illTyped("""TakesCorrectSteps[HNil :+: (St.Move[Float, l.type] :: HNil), l.type]""", "could not find implicit value for parameter.*")
+    illTyped("""TakesCorrectSteps[HNil :+: (St.InState[Int, l.type] :: HNil), l.type]""", "could not find implicit value for parameter.*")
+    illTyped("""TakesCorrectSteps[(St.Move[Int, l.type] :: HNil) :+: (St.InState[Byte, l.type] :: St.InState[Int, l.type] :: HNil), l.type]""", "could not find implicit value for parameter.*")
 
-    TakesCorrectSteps[(St.InState[Rs1, Int, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil) :+: (St.InState[Rs1, Int, l.Lb] :: St.InState[Rs1, Int, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil), Rs1, l.Lb]
-    illTyped("""TakesCorrectSteps[(St.InState[Rs1, Float, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil) :+: (St.InState[Rs1, Int, l.Lb] :: St.InState[Rs1, Int, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil), Rs1, l.Lb]""", "could not find implicit value for parameter.*")
+    TakesCorrectSteps[(St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil) :+: (St.InState[Int, l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil), l.type]
+    illTyped("""TakesCorrectSteps[(St.InState[Float, l.type] :: St.Move[Int, l.type] :: HNil) :+: (St.InState[Int, l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil), l.type]""", "could not find implicit value for parameter.*")
   }
 
   final object consistentResource {
-    ConsistentResource[St.Delete[Rs1, l.Lb] :: HNil, Rs1, l.Lb]
-    ConsistentResource[(St.Delete[Rs1, l.Lb] :: HNil) :+: (St.Delete[Rs1, l.Lb] :: St.Move[Rs1, Int, l.Lb] :: HNil), Rs1, l.Lb]
-    illTyped("""ConsistentResource[(St.Delete[Rs1, l.Lb] :: HNil) :+: (St.Delete[Rs1, l.Lb] :: St.InState[Rs1, Int, l.Lb] :: HNil), Rs1, l.Lb]""", "could not find implicit value for parameter.*")
+    ConsistentResource[St.Delete[l.type] :: St.Move[Int, l.type] :: HNil, l.type]
+    ConsistentResource[(St.Delete[l.type] :: St.Move[Int, l.type] :: HNil) :+: (St.Delete[l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil), l.type]
+    illTyped("""ConsistentResource[(St.Delete[l.type] :: St.Move[Int, l.type] :: HNil) :+: (St.Delete[l.type] :: St.Move[Int, l.type] :: St.InState[Int, l.type] :: HNil), l.type]""", "could not find implicit value for parameter.*")
+  }
+
+  final object headResource {
+
+    val h1 = HeadResource[St.Delete[l.type] :: HNil]
+    implicitly[h1.L =:= l.type]
+
+    val h2 = HeadResource[St.Move[Int, l.type] :: HNil]
+    implicitly[h2.L =:= l.type]
+
+    val h3 = HeadResource[St.InState[Int, l.type] :: HNil]
+    implicitly[h3.L =:= l.type]
+
+    val h4 = HeadResource[St.Delete[l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil]
+    implicitly[h4.L =:= l.type]
+  }
+
+  final object consistentTree {
+
+    ConsistentTree[HNil]
+
+    val hr = HeadResource[St.Delete[l.type] :: St.Move[Int, l.type] :: HNil]
+    implicitly[hr.L =:= l.type]
+    val fl = Filter[St.Delete[l.type] :: St.Move[Int, l.type] :: HNil, hr.L]
+    implicitly[fl.Out =:= (St.Delete[l.type] :: St.Move[Int, l.type] :: HNil)]
+    val rs = ConsistentResource[fl.Out, hr.L]
+    ConsistentResource[(St.Delete[l.type] :: St.Move[Int, l.type] :: HNil), hr.L]
+
+    ConsistentTree[St.Delete[l.type] :: St.Move[Int, l.type] :: HNil]
   }
 }

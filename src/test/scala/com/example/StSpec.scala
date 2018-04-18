@@ -32,7 +32,7 @@ class StSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals {
 
     import St._
 
-    def create: St.Aux[L, Prepend[Create[Door, Closed, L]]#λ] forSome { type L <: Label[Door] { type Lb = L } } =
+    def create: St.Aux[L, Prepend[Create[Closed, L]]#λ] forSome { type L <: Label with Singleton { type Res[x] = Door[x] } } =
       St.create[Door, Closed]
 
     implicit val init: St.Api.Initial[Door, Closed] =
@@ -46,26 +46,28 @@ class StSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals {
   trait Closed
   trait Open
 
+  type DoorLabel = St.Label { type Res[x] = Door[x] }
+
   val s1 = for {
     l1 <- St.create[Door, Closed]
-    _ = typed[St.Label[Door]](l1)
+    _ = typed[DoorLabel](l1)
     v1 <- St.pure(42)
     _ <- l1.delete
   } yield v1
 
   val s2 = for {
     l2 <- Door.create
-    _ = typed[St.Label[Door]](l2)
+    _ = typed[St.Label { type Res[x] = Door[x] }](l2)
     v2 <- St.pure("foo")
     _ <- l2.delete
   } yield v2
 
   val s3 = for {
     l1 <- St.create[Door, Closed]
-    _ = typed[St.Label[Door]](l1)
+    _ = typed[DoorLabel](l1)
     v1 <- St.pure(42)
     l2 <- Door.create
-    _ = typed[St.Label[Door]](l2)
+    _ = typed[DoorLabel](l2)
     _ <- l1.delete
     v2 <- St.pure("foo")
     _ <- l2.delete
@@ -91,7 +93,7 @@ class StSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals {
 
     import St._
 
-    def create: St.Aux[L, Prepend[Create[Var, Unit, L]]#λ] forSome { type L <: Label[Var] { type Lb = L } } =
+    def create: St.Aux[L, Prepend[Create[Unit, L]]#λ] forSome { type L <: Label { type Res[x] = Var[x] } } =
       St.create[Var, Unit]
 
     implicit val init: St.Api.Initial[Var, Unit] =
