@@ -34,8 +34,14 @@ final object HTreeOpsSpec {
     implicit def intToByte: St.Api.Transition[Rs1, Int, Byte] =
       new St.Api.Transition[Rs1, Int, Byte] {}
 
+    implicit def byteToBigInt: St.Api.Transition[Rs1, Byte, BigInt] =
+      new St.Api.Transition[Rs1, Byte, BigInt] {}
+
     implicit def finInt: St.Api.Final[Rs1, Int] =
       new St.Api.Transition[Rs1, Int, St.Destroyed] {}
+
+    implicit def finBigInt: St.Api.Final[Rs1, BigInt] =
+      new St.Api.Transition[Rs1, BigInt, St.Destroyed] {}
   }
 
   final class Rs2[A]
@@ -45,6 +51,39 @@ final object HTreeOpsSpec {
       new St.Api.Initial[Rs2, Int] {}
   }
 
+  /**
+   *    ↱ Sb ⬎
+   * → Sa    Sd →
+   *    ↳ Sc ⬏
+   */
+  final class Rs3[A]
+
+  trait Sa
+  trait Sb
+  trait Sc
+  trait Sd
+
+  final object Rs3 {
+
+    implicit def initA: St.Api.Initial[Rs3, Sa] =
+      new St.Api.Initial[Rs3, Sa] {}
+
+    implicit def trAB: St.Api.Transition[Rs3, Sa, Sb] =
+      new St.Api.Transition[Rs3, Sa, Sb] {}
+
+    implicit def trAC: St.Api.Transition[Rs3, Sa, Sc] =
+      new St.Api.Transition[Rs3, Sa, Sc] {}
+
+    implicit def trBD: St.Api.Transition[Rs3, Sb, Sd] =
+      new St.Api.Transition[Rs3, Sb, Sd] {}
+
+    implicit def trCD: St.Api.Transition[Rs3, Sc, Sd] =
+      new St.Api.Transition[Rs3, Sc, Sd] {}
+
+    implicit def finD: St.Api.Final[Rs3, Sd] =
+      new St.Api.Final[Rs3, Sd] {}
+  }
+
   sealed trait Phantom
 
   val l = St.unsafeRun(St.create[Rs1, Int]).unsafeRunSync()
@@ -52,6 +91,12 @@ final object HTreeOpsSpec {
 
   val m = St.unsafeRun(St.create[Rs2, Int]).unsafeRunSync()
   implicitly[m.Res[Phantom] =:= Rs2[Phantom]]
+
+  val n1 = St.unsafeRun(St.create[Rs3, Sa]).unsafeRunSync()
+  implicitly[n1.Res[Phantom] =:= Rs3[Phantom]]
+
+  val n2 = St.unsafeRun(St.create[Rs3, Sa]).unsafeRunSync()
+  implicitly[n2.Res[Phantom] =:= Rs3[Phantom]]
 
   final object filter {
 
@@ -232,7 +277,171 @@ final object HTreeOpsSpec {
     implicitly[fl.Out =:= (St.Delete[l.type] :: St.Move[Int, l.type] :: HNil)]
     val rs = ConsistentResource[fl.Out, hr.L]
     ConsistentResource[(St.Delete[l.type] :: St.Move[Int, l.type] :: HNil), hr.L]
-
     ConsistentTree[St.Delete[l.type] :: St.Move[Int, l.type] :: HNil]
+
+    ConsistentTree[St.Delete[l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil]
+    illTyped("""ConsistentTree[St.Delete[l.type] :: St.InState[Byte, l.type] :: St.Move[Int, l.type] :: HNil]""", "could not find implicit value for parameter.*")
+
+    ConsistentTree[St.Delete[l.type] :: St.Move[BigInt, l.type] :: St.Move[Byte, l.type] :: St.Move[Int, l.type] :: HNil]
+    illTyped("""ConsistentTree[St.Delete[l.type] :: St.Move[Int, l.type] :: St.Move[Byte, l.type] :: St.Move[Int, l.type] :: HNil]""", "could not find implicit value for parameter.*")
+
+    ConsistentTree[(St.Delete[l.type] :: St.Move[Int, l.type] :: HNil) :+: (St.Delete[l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil)]
+    illTyped("""ConsistentTree[(St.Delete[l.type] :: St.Move[Int, l.type] :: HNil) :+: (St.Delete[l.type] :: St.InState[Float, l.type] :: St.Move[Int, l.type] :: HNil)]""", "could not find implicit value for parameter.*")
+    illTyped("""ConsistentTree[(St.Delete[l.type] :: St.Move[Int, l.type] :: HNil) :+: (St.Delete[l.type] :: St.InState[Int, l.type] :: HNil)]""", "could not find implicit value for parameter.*")
+
+    ConsistentTree[
+      St.Delete[n1.type] ::
+      St.Move[Sd, n1.type] ::
+      St.InState[Sb, n1.type] ::
+      St.Delete[l.type] ::
+      St.Move[Sb, n1.type] ::
+      St.InState[Int, l.type] ::
+      St.Move[Sa, n1.type] ::
+      St.Move[Int, l.type] ::
+      HNil
+    ]
+
+    illTyped("""ConsistentTree[St.Delete[n1.type] :: St.Move[Sd, n1.type] :: St.InState[Sc, n1.type] :: St.Delete[l.type] :: St.Move[Sb, n1.type] :: St.InState[Int, l.type] :: St.Move[Sa, n1.type] :: St.Move[Int, l.type] :: HNil]""", "could not find implicit value for parameter.*")
+    illTyped("""ConsistentTree[St.Delete[n1.type] :: St.Move[Sd, n1.type] :: St.InState[Sb, n1.type] :: St.Move[Sb, n1.type] :: St.InState[Int, l.type] :: St.Move[Sa, n1.type] :: St.Move[Int, l.type] :: HNil]""", "could not find implicit value for parameter.*")
+
+    ConsistentTree[
+      St.Delete[n1.type] ::
+      St.Delete[n2.type] ::
+      St.Move[Sd, n2.type] ::
+      St.Move[Sc, n2.type] ::
+      St.Move[Sd, n1.type] ::
+      St.InState[Sb, n1.type] ::
+      St.InState[Sa, n2.type] ::
+      St.Delete[l.type] ::
+      St.Move[Sb, n1.type] ::
+      St.InState[Int, l.type] ::
+      St.Move[Sa, n2.type] ::
+      St.Move[Sa, n1.type] ::
+      St.Move[Int, l.type] ::
+      HNil
+    ]
+
+    illTyped("""ConsistentTree[
+      St.Delete[n1.type] ::
+      St.Delete[n2.type] ::
+      St.Move[Sd, n2.type] ::
+      St.Move[Sc, n2.type] ::
+      St.Move[Sd, n1.type] ::
+      St.InState[Sb, n1.type] ::
+      St.InState[Sb, n2.type] ::
+      St.Delete[l.type] ::
+      St.Move[Sb, n1.type] ::
+      St.InState[Int, l.type] ::
+      St.Move[Sa, n2.type] ::
+      St.Move[Sa, n1.type] ::
+      St.Move[Int, l.type] ::
+      HNil
+    ]
+    """, "could not find implicit value for parameter.*")
+
+    illTyped("""ConsistentTree[
+      St.Delete[n1.type] ::
+      St.Delete[n2.type] ::
+      St.Move[Sd, n2.type] ::
+      St.Move[Sc, n2.type] ::
+      St.Move[Sd, n1.type] ::
+      St.InState[Sb, n1.type] ::
+      St.InState[Sa, n2.type] ::
+      St.Delete[l.type] ::
+      St.Move[Sb, n1.type] ::
+      St.InState[Int, l.type] ::
+      St.Move[Sa, n1.type] ::
+      St.Move[Int, l.type] ::
+      HNil
+    ]
+    """, "could not find implicit value for parameter.*")
+
+    illTyped("""ConsistentTree[
+      St.Delete[n1.type] ::
+      St.Move[Sd, n2.type] ::
+      St.Move[Sc, n2.type] ::
+      St.Move[Sd, n1.type] ::
+      St.InState[Sb, n1.type] ::
+      St.InState[Sa, n2.type] ::
+      St.Delete[l.type] ::
+      St.Move[Sb, n1.type] ::
+      St.InState[Int, l.type] ::
+      St.Move[Sa, n2.type] ::
+      St.Move[Sa, n1.type] ::
+      St.Move[Int, l.type] ::
+      HNil
+    ]
+    """, "could not find implicit value for parameter.*")
+
+    ConsistentTree[
+      (
+        St.Delete[n1.type] ::
+        St.Delete[n2.type] ::
+        St.Move[Sd, n2.type] ::
+        St.Move[Sc, n2.type] ::
+        St.Move[Sd, n1.type] ::
+        St.InState[Sb, n1.type] ::
+        St.InState[Sa, n2.type] ::
+        St.Delete[l.type] ::
+        St.Move[Sb, n1.type] ::
+        St.InState[Int, l.type] ::
+        St.Move[Sa, n2.type] ::
+        St.Move[Sa, n1.type] ::
+        St.Move[Int, l.type] ::
+        HNil
+      ) :+:
+      (
+        St.Delete[n2.type] ::
+        St.Delete[n1.type] ::
+        St.Move[Sd, n2.type] ::
+        St.Move[Sd, n1.type] ::
+        St.Move[Sc, n2.type] ::
+        St.InState[Sb, n1.type] ::
+        St.InState[Sa, n2.type] ::
+        St.Delete[l.type] ::
+        St.InState[Int, l.type] ::
+        St.Move[Sb, n1.type] ::
+        St.Move[Sa, n2.type] ::
+        St.Move[Sa, n1.type] ::
+        St.Move[Int, l.type] ::
+        HNil
+      )
+    ]
+
+    illTyped("""ConsistentTree[
+      (
+        St.Delete[n1.type] ::
+        St.Delete[n2.type] ::
+        St.Move[Sd, n2.type] ::
+        St.Move[Sc, n2.type] ::
+        St.Move[Sd, n1.type] ::
+        St.InState[Sb, n1.type] ::
+        St.InState[Sa, n2.type] ::
+        St.Delete[l.type] ::
+        St.Move[Sb, n1.type] ::
+        St.InState[Int, l.type] ::
+        St.Move[Sa, n2.type] ::
+        St.Move[Sa, n1.type] ::
+        St.Move[Int, l.type] ::
+        HNil
+      ) :+:
+      (
+        St.Delete[n2.type] ::
+        St.Delete[n1.type] ::
+        St.Move[Sd, n2.type] ::
+        St.Move[Sd, n1.type] ::
+        St.Move[Sc, n2.type] ::
+        St.InState[Sa, n1.type] ::
+        St.InState[Sa, n2.type] ::
+        St.Delete[l.type] ::
+        St.InState[Int, l.type] ::
+        St.Move[Sb, n1.type] ::
+        St.Move[Sa, n2.type] ::
+        St.Move[Sa, n1.type] ::
+        St.Move[Int, l.type] ::
+        HNil
+      )
+    ]
+    """, "could not find implicit value for parameter.*")
   }
 }
