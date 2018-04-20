@@ -98,7 +98,7 @@ final object HTreeOpsSpec {
   val n2 = St.unsafeRun(St.create[Rs3, Sa]).unsafeRunSync()
   implicitly[n2.Res[Phantom] =:= Rs3[Phantom]]
 
-  final object filter {
+  private def filter(): Unit = {
 
     val f1 = Filter[HNil, l.type]
     implicitly[f1.Out =:= HNil]
@@ -201,7 +201,7 @@ final object HTreeOpsSpec {
     ]
   }
 
-  final object destroyedAtEnd {
+  private def destroyedAtEnd(): Unit = {
 
     DestroyedAtEnd[St.Delete[l.type] :: HNil, l.type]
     DestroyedAtEnd[St.Delete[l.type] :: St.Move[Int, l.type] :: HNil, l.type]
@@ -214,7 +214,7 @@ final object HTreeOpsSpec {
     illTyped("""DestroyedAtEnd[((St.Delete[l.type] :: HNil) :+: (St.Move[Int, l.type] :: HNil)) :+: (St.Delete[l.type] :: HNil), l.type]""", "could not find implicit value for parameter.*")
   }
 
-  final object takesCorrectSteps {
+  private def takesCorrectSteps(): Unit = {
 
     TakesCorrectSteps[HNil, l.type]
     TakesCorrectSteps[St.Move[Int, l.type] :: HNil, l.type]
@@ -246,13 +246,13 @@ final object HTreeOpsSpec {
     illTyped("""TakesCorrectSteps[(St.InState[Float, l.type] :: St.Move[Int, l.type] :: HNil) :+: (St.InState[Int, l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil), l.type]""", "could not find implicit value for parameter.*")
   }
 
-  final object consistentResource {
+  private def consistentResource(): Unit = {
     ConsistentResource[St.Delete[l.type] :: St.Move[Int, l.type] :: HNil, l.type]
     ConsistentResource[(St.Delete[l.type] :: St.Move[Int, l.type] :: HNil) :+: (St.Delete[l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil), l.type]
     illTyped("""ConsistentResource[(St.Delete[l.type] :: St.Move[Int, l.type] :: HNil) :+: (St.Delete[l.type] :: St.Move[Int, l.type] :: St.InState[Int, l.type] :: HNil), l.type]""", "could not find implicit value for parameter.*")
   }
 
-  final object headResource {
+  private def headResource(): Unit = {
 
     val h1 = HeadResource[St.Delete[l.type] :: HNil]
     implicitly[h1.L =:= l.type]
@@ -267,7 +267,7 @@ final object HTreeOpsSpec {
     implicitly[h4.L =:= l.type]
   }
 
-  final object consistentTree {
+  private def consistentTree(): Unit = {
 
     ConsistentTree[HNil]
 
@@ -275,10 +275,9 @@ final object HTreeOpsSpec {
     implicitly[hr.L =:= l.type]
     val fl = Filter[St.Delete[l.type] :: St.Move[Int, l.type] :: HNil, hr.L]
     implicitly[fl.Out =:= (St.Delete[l.type] :: St.Move[Int, l.type] :: HNil)]
-    val rs = ConsistentResource[fl.Out, hr.L]
-    ConsistentResource[(St.Delete[l.type] :: St.Move[Int, l.type] :: HNil), hr.L]
-    ConsistentTree[St.Delete[l.type] :: St.Move[Int, l.type] :: HNil]
+    ConsistentResource[fl.Out, hr.L]
 
+    ConsistentTree[St.Delete[l.type] :: St.Move[Int, l.type] :: HNil]
     ConsistentTree[St.Delete[l.type] :: St.InState[Int, l.type] :: St.Move[Int, l.type] :: HNil]
     illTyped("""ConsistentTree[St.Delete[l.type] :: St.InState[Byte, l.type] :: St.Move[Int, l.type] :: HNil]""", "could not find implicit value for parameter.*")
 
@@ -443,5 +442,15 @@ final object HTreeOpsSpec {
       )
     ]
     """, "could not find implicit value for parameter.*")
+  }
+
+  /** To silence unused method warnings */
+  def main(): Unit = {
+    filter()
+    destroyedAtEnd()
+    takesCorrectSteps()
+    consistentResource()
+    headResource()
+    consistentTree()
   }
 }

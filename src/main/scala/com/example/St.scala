@@ -16,8 +16,6 @@
 
 package com.example
 
-import scala.language.existentials
-
 import cats.~>
 import cats.effect.IO
 import cats.evidence.As
@@ -35,6 +33,9 @@ sealed abstract class St[+A] { self =>
 
   def map[B](f: A => B): St.Aux[B, Out] =
     flatMap[B, St.Aux[B, Identity#λ]](a => St.pure[B](f(a)))
+
+  def run[B >: A]: Machine[B, Out[HNil]] =
+    new Machine[B, Out[HNil]](this) {}
 
   protected def unwrap: St.Aux[Res, self.Out]
 }
@@ -65,7 +66,7 @@ object St {
   sealed abstract class Label {
     type Lb <: Label
     type Res[_]
-    def delete: St.Aux[Unit, Prepend[Delete[this.Lb]]#λ]
+    def delete: St.Aux[Unit, Prepend[Move[Destroyed, this.Lb]]#λ]
     def read[S]: St.Aux[this.Res[S], Prepend[InState[S, this.Lb]]#λ]
     def write[T](r: Res[T]): St.Aux[Unit, Prepend[Move[T, this.Lb]]#λ]
   }
@@ -76,11 +77,11 @@ object St {
   sealed trait HtEntry[L <: Label]
 
   sealed trait Move[S, L <: Label] extends HtEntry[L] {
-    type Lb = L
+    //type Lb = L
   }
 
   sealed trait InState[S, L <: Label] extends HtEntry[L] {
-    type Lb = L
+    //type Lb = L
   }
 
   type Create[S, L <: Label] = Move[S, L]
@@ -145,7 +146,6 @@ object St {
   def pure[A](a: A): St.Aux[A, Identity#λ] =
     Pure(a)
 
-  // TODO: infer `S`
   def create[R[_], S](
     implicit @evidence ev: Api.Initial[R, S]
   ): St.Aux[L, Prepend[Create[S, L]]#λ] forSome { type L <: Label with Singleton { type Lb = L; type Res[x] = R[x] } } = {
@@ -159,21 +159,27 @@ object St {
     Mk[S, l.type](l)
   }
 
-  // Type classes for consistency checking:
-
-  sealed abstract class WellFormed[T <: HTree] // TODO
-
   // Execution:
 
-  // TODO: parameterized effect type
-  def run[A](st: St[A])(implicit @evidence ev: WellFormed[st.Out[HNil]]): IO[A] =
-    interpreter(st)
+  sealed abstract class Machine[A, H <: HTree](st: St[A]) {
 
-  def unsafeRun[A](st: St[A]): IO[A] =
-    interpreter(st)
+    type Ops = H
+
+    type Res = A
+
+    // TODO: parameterized effect type
+    def run(implicit @evidence ev: HTreeOps.ConsistentTree[st.Out[HNil]]): IO[A] =
+      interpreter(st)
+
+    def unsafeRun: IO[A] =
+      interpreter(st)
+
+    def debug(implicit dbg: HTree.Debug[Ops]): String =
+      dbg.debug
+  }
 
   // TODO: stack safety, parameterized effect type, force constraints, ...
-  def interpreter: St ~> IO = new ~>[St, IO] {
+  private def interpreter: St ~> IO = new ~>[St, IO] {
     def apply[A](st: St[A]): IO[A] = st match {
       case Pure(a) =>
         IO.pure(a)

@@ -17,6 +17,8 @@
 lazy val scates = project.in(file("."))
   .settings(name := "scates")
   .settings(commonSettings)
+  .configs(IntegrationTest) // We're abusing IntegrationTest test for separating
+  .settings(Defaults.itSettings) // sources which take a long time to compile.
 
 lazy val commonSettings = Seq[Setting[_]](
   scalaVersion := "2.12.4-bin-typelevel-4",
@@ -27,7 +29,7 @@ lazy val commonSettings = Seq[Setting[_]](
     "-deprecation",
     "-unchecked",
     "-encoding", "UTF-8",
-    "-language:higherKinds",
+    "-language:higherKinds,existentials",
     "-Xlint:_",
     "-Xfuture",
     "-Xfatal-warnings",
