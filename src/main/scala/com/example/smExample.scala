@@ -262,6 +262,80 @@ object atm extends SmExample {
   } yield (r1.toOption, r2.toOption)
 }
 
+/** From http://alcestes.github.io/lchannels/ */
+object atmRes extends SmExample {
+
+  sealed trait NotAuthenticated
+  final case object NotAuthenticated extends NotAuthenticated
+  final case class Authenticated(balance: Int)
+
+  sealed trait AtmOp[F, T, A]
+  final case class Authenticate(card: String, pin: String)
+    extends AtmOp[NotAuthenticated, Authenticated, Unit]
+  final case object CheckBalance
+    extends AtmOp[Authenticated, NotAuthenticated, Int]
+  final case object Quit
+    extends AtmOp[Authenticated, NotAuthenticated, Unit]
+
+  type AtmSm[F, T, A] = Sm[AtmOp, F, T, A]
+
+  def authenticate(card: String, pin: String): AtmSm[NotAuthenticated, Authenticated, Unit] =
+    Sm.liftF(Authenticate(card, pin))
+  val checkBalance: AtmSm[Authenticated, NotAuthenticated, Int] =
+    Sm.liftF(CheckBalance)
+  val quit: AtmSm[Authenticated, NotAuthenticated, Unit] =
+    Sm.liftF(Quit)
+
+  final case class Atm[A](state: A)
+
+  def authWithDb(card: String, pin: String): IO[Option[Authenticated]] =
+    if (pin == "1234") IO.pure(Some(Authenticated(balance = 21)))
+    else IO.pure(None)
+
+  implicit val interp: Sm.Execute.Aux[AtmOp, IO, Atm, NotAuthenticated, NotAuthenticated] = new Sm.Execute[AtmOp] {
+    override type M[a] = IO[a]
+    override type Res[st] = Atm[st]
+    override type InitSt = NotAuthenticated
+    override type FinSt = NotAuthenticated
+    override def init: IO[Atm[NotAuthenticated]] = IO.pure(Atm(NotAuthenticated))
+    override def exec[F, T, A](atm: Atm[F])(d: AtmOp[F, T, A]): IO[(Atm[T], A)] = d match {
+      case Authenticate(c, p) =>
+        for {
+          resp <- authWithDb(c, p)
+          atm <- resp match {
+            case Some(auth) => IO.pure(Atm(auth))
+            case None => IO.raiseError(new Exception)
+          }
+        } yield (atm, ())
+      case CheckBalance =>
+        IO {
+          println("Returning balance")
+          (Atm(NotAuthenticated), atm.state.balance)
+        }
+      case Quit => IO((Atm(NotAuthenticated), println("Goodbye")))
+    }
+    override def fin(ref: Res[NotAuthenticated]): IO[Unit] = IO.unit
+  }
+
+  val goodPin: AtmSm[NotAuthenticated, NotAuthenticated, Int] = for {
+    _ <- authenticate("11232432", "1234")
+    b <- checkBalance
+  } yield b
+
+  val badPin: AtmSm[NotAuthenticated, NotAuthenticated, Int] = for {
+    _ <- authenticate("11232432", "9876")
+    b <- checkBalance
+  } yield b
+
+  val tsk1: IO[Int] = goodPin.run[IO, Atm]
+  val tsk2: IO[Int] = badPin.run[IO, Atm]
+
+  val tsk: IO[(Option[Int], Option[Int])] = for {
+    r1 <- tsk1.attempt
+    r2 <- tsk2.attempt
+  } yield (r1.toOption, r2.toOption)
+}
+
 /** From Idris States */
 object varRef extends SmExample {
 

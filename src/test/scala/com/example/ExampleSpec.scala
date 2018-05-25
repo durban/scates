@@ -23,13 +23,15 @@ import org.scalatest.FlatSpec
 class ExampleSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals {
 
   val ixFreeExamples: Map[IxFreeExample, Any] = Map(
-    doorWithIxFree -> 8
+    doorWithIxFree -> 8,
+    atmWithIxFree -> ((Some(42), None))
   )
 
   val smExamples: Map[SmExample, Any] = Map(
     doorWithSm -> 8,
     atmCh -> 99,
     atm -> ((Some(56), None)),
+    atmRes -> ((Some(21), None)),
     varRef -> 56.5
   )
 

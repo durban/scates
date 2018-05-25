@@ -16,6 +16,7 @@
 
 package com.example
 
+import cats.Monad
 import cats.data.IndexedStateT
 import cats.implicits._
 
@@ -32,7 +33,7 @@ final class Sm[S[_, _, _], F, T, A] private (
     new Sm(repr.map(f))
 
   // TODO: infer `R`
-  def run[M[_] : cats.Monad, R[_]](
+  def run[M[_] : Monad, R[_]](
     implicit
     exec: Execute.Aux[S, M, R, F, T]
   ): M[A] = {
@@ -61,9 +62,9 @@ object Sm {
 
   trait Execute[S[_, _, _]] {
     type M[a]
+    type Res[st]
     type InitSt
     type FinSt
-    type Res[st]
     def init: M[Res[InitSt]]
     def exec[F, T, A](res: Res[F])(sa: S[F, T, A]): M[(Res[T], A)]
     def fin(ref: Res[FinSt]): M[Unit]
@@ -83,4 +84,20 @@ object Sm {
 
   def liftF[S[_, _, _], F, T, A](sa: S[F, T, A]): Sm[S, F, T, A] =
     new Sm(IxFree.liftF(sa))
+
+  implicit def smIxMonad[S[_, _, _]]: IxMonad[Sm[S, ?, ?, ?]] = new IxMonad[Sm[S, ?, ?, ?]] {
+
+    def flatMap[F, T, U, A, B](fa: Sm[S, F, T, A])(f: A => Sm[S, T, U, B]): Sm[S, F, U, B] =
+      fa.flatMap(f)
+
+    def pure[F, A](a: A): Sm[S, F, F, A] =
+      Sm.pure(a)
+
+    // This should be okay, since `flatMap` is stack-safe
+    def tailRecM[Z[_, _, _], F, T, A, B](a: Z[F, T, A])(f: FunctionTr[Z, Sm[S, ?, ?, ?], A, B])(implicit Z: IxMonad[Z]): Sm[S, F, T, B] =
+      this.defaultTailRecM(a)(f)
+  }
+
+  implicit def smMonad[S[_, _, _], F]: Monad[Sm[S, F, F, ?]] =
+    IxMonad.monadFromIxMonad
 }
