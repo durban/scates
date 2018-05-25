@@ -68,9 +68,9 @@ object doorWithSm extends SmExample {
 /** From http://alcestes.github.io/lchannels/ */
 object atmCh extends SmExample {
 
-  import akka.typed._
-  import akka.typed.scaladsl._
-  import akka.typed.scaladsl.AskPattern._
+  import akka.actor.typed._
+  import akka.actor.typed.scaladsl._
+  import akka.actor.typed.scaladsl.AskPattern._
   import scala.concurrent.duration._
   import scala.util.{ Success, Failure }
   import scala.concurrent.ExecutionContext.Implicits.global
@@ -163,12 +163,12 @@ object atmCh extends SmExample {
     b <- checkBalance
   } yield b
 
-  val mock1: Behavior[Any] = Actor.immutable { (ctx, msg) =>
+  val mock1: Behavior[Any] =  Behaviors.receive { (ctx, msg) =>
     msg match {
       case a @ msgs.Authenticate(c, p) =>
         println("Successful authentication")
         a.cont ! msgs.Success()(ctx.self)
-        Actor.same
+        Behaviors.same
       case m: msgs.Menu =>
         m match {
           case c @ msgs.CheckBalance() =>
@@ -178,10 +178,10 @@ object atmCh extends SmExample {
             println("Quit")
             ()
         }
-        Actor.same
+        Behaviors.same
       case x =>
         println(s"unhandled: $x")
-        Actor.same
+        Behaviors.same
     }
   }
 

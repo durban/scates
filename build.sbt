@@ -64,21 +64,14 @@ lazy val commonSettings = Seq[Setting[_]](
 
 lazy val dependencies = new {
 
-  val catsVersion = "1.0.0-RC1"
-  val circeVersion = "0.9.0-M2"
-  val fs2Version = "0.10.0-M8"
+  val catsVersion = "1.1.0"
+  val fs2Version = "0.10.4"
 
-  val shapeless = "com.chuusai" %% "shapeless" % "2.3.2"
+  val shapeless = "com.chuusai" %% "shapeless" % "2.3.3"
   val cats = Seq(
     "org.typelevel" %% "cats-core" % catsVersion,
     "org.typelevel" %% "cats-free" % catsVersion,
-    "org.typelevel" %% "cats-effect" % "0.5"
-  )
-
-  val circe = Seq(
-    "io.circe" %% "circe-core" % circeVersion,
-    "io.circe" %% "circe-generic" % circeVersion,
-    "io.circe" %% "circe-parser" % circeVersion
+    "org.typelevel" %% "cats-effect" % "1.0.0-RC"
   )
 
   val fs2 = Seq(
@@ -92,10 +85,10 @@ lazy val dependencies = new {
   )
 
   val test = Seq(
-    "org.scalatest" %% "scalatest" % "3.0.2"
+    "org.scalatest" %% "scalatest" % "3.0.5"
   )
 
   val akka = Seq(
-    "com.typesafe.akka" %% "akka-typed" % "2.5.8"
+    "com.typesafe.akka" %% "akka-actor-typed" % "2.5.12"
   )
 }
