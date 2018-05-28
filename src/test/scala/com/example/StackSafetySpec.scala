@@ -18,6 +18,7 @@ package com.example
 
 import cats.Id
 import cats.data.IndexedStateT
+import cats.effect.IO
 
 import org.scalactic.TypeCheckedTripleEquals
 import org.scalatest.{ FlatSpec, Matchers }
@@ -51,18 +52,16 @@ class StackSafetySpec extends FlatSpec with Matchers with TypeCheckedTripleEqual
     r should === (())
   }
 
-  // TODO: This should pass when https://github.com/typelevel/cats/pull/2187
-  // TODO: is merged and released.
-  "IxMonad instance for IndexedStateT" should "be stack-safe" ignore {
-    val r = prog.foldMap[IndexedStateT[Id, ?, ?, ?]](new FunctionX[Op, IndexedStateT[Id, ?, ?, ?]] {
-      override def apply[A, B, C](f: Op[A, B, C]): IndexedStateT[Id, A, B, C] = f match {
+  "IxMonad instance for IndexedStateT" should "be stack-safe (if F is stack-safe)" in {
+    val r = prog.foldMap[IndexedStateT[IO, ?, ?, ?]](new FunctionX[Op, IndexedStateT[IO, ?, ?, ?]] {
+      override def apply[A, B, C](f: Op[A, B, C]): IndexedStateT[IO, A, B, C] = f match {
         case DoIt =>
-          IndexedStateT[Id, St, St, Unit] {
-            case St(n) => (St(n + 1), ())
+          IndexedStateT[IO, St, St, Unit] {
+            case St(n) => IO.pure((St(n + 1), ()))
           }
       }
-    })(IxMonad.ixMonadForIndexedStateT[Id])
+    })(IxMonad.ixMonadForIndexedStateT[IO])
 
-    r.run(St(0)) should === ((St(N), ()))
+    r.run(St(0)).unsafeRunSync() should === ((St(N), ()))
   }
 }
