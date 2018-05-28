@@ -32,7 +32,8 @@ class ExampleSpec extends FlatSpec with Matchers with TypeCheckedTripleEquals {
     atmCh -> 99,
     atm -> ((Some(56), None)),
     atmRes -> ((Some(21), None)),
-    varRef -> 56.5
+    varRef -> 56.5,
+    withBracket -> ((123, 123))
   )
 
   "IxFree examples" should "work" in {

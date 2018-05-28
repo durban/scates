@@ -53,7 +53,6 @@ object doorWithSm extends SmExample {
       case CloseDoor => IO((res, println("Closing door ...")))
       case Knock => IO((res, println("Knock-knock!")))
     }
-    override def fin(ref: Res[Closed]): IO[Unit] = IO.unit
   }
 
   val prog: DoorSm[Closed, Closed, Int] = for {
@@ -152,7 +151,6 @@ object atmCh extends SmExample {
             (entry, ())
           }
       }
-      override def fin(ref: Res[msgs.Authenticate]): M[Unit] = IO.unit
     }
   }
 
@@ -240,7 +238,6 @@ object atm extends SmExample {
         }
       case Quit => IO((res, println("Goodbye")))
     }
-    override def fin(ref: Res[NotAuthenticated]): IO[Unit] = IO.unit
   }
 
   val goodPin: AtmSm[NotAuthenticated, NotAuthenticated, Int] = for {
@@ -314,7 +311,6 @@ object atmRes extends SmExample {
         }
       case Quit => IO((Atm(NotAuthenticated), println("Goodbye")))
     }
-    override def fin(ref: Res[NotAuthenticated]): IO[Unit] = IO.unit
   }
 
   val goodPin: AtmSm[NotAuthenticated, NotAuthenticated, Int] = for {
@@ -358,7 +354,6 @@ object varRef extends SmExample {
       case g: Get[a] => IO.pure((res, res))
       case p: Put[f, t] => IO.pure((p.t, ()))
     }
-    override def fin(ref: Res[T]) = IO.unit
   }
 
   val prog: VarSm[Unit, Double, Double] = for {
@@ -372,4 +367,151 @@ object varRef extends SmExample {
 
   val tsk: IO[Double] =
     prog.run[IO, cats.Id]
+}
+
+object withBracket extends SmExample {
+
+  import akka.actor.typed._
+  import akka.actor.typed.scaladsl._
+  import akka.actor.typed.scaladsl.AskPattern._
+  import scala.concurrent.duration._
+  import scala.util.{ Success, Failure }
+  import scala.concurrent.ExecutionContext.Implicits.global
+
+  implicit val to: akka.util.Timeout =
+    akka.util.Timeout(2.seconds)
+
+  final case class ActRef[A](ref: ActorRef[A])(implicit sch: akka.actor.Scheduler) {
+    val scheduler = sch
+    def ! (a: A): IO[Unit] = IO { ref ! a }
+    def ? [B](f: ActorRef[B] => A): IO[B] = IO.suspend {
+      IO.async[B] { cb =>
+        val fut = ref ? f
+        fut.onComplete {
+          case Success(b) => cb(Right(b))
+          case Failure(ex) => cb(Left(ex))
+        }
+      }
+    }
+  }
+
+  object server {
+
+    sealed abstract class Entry
+    case class Authenticate(card: String, pin: String)(val cont: ActorRef[Response]) extends Entry
+    private case object StopYourself extends Entry
+
+    sealed abstract class Response
+    case class Failure() extends Response
+    case class Success()(val cont: ActorRef[Menu]) extends Response
+
+    sealed abstract class Menu
+    case class CheckBalance()(val cont: ActorRef[Balance]) extends Menu
+    case class Quit()(val cont: ActorRef[Bye]) extends Menu
+
+    case class Balance(amount: Int)(val cont: ActorRef[Entry])
+    case class Bye()(val cont: ActorRef[Entry])
+
+    def interp(sys: ActorSystem[_]): Sm.ExecuteBracket.Aux[client.AtmOp, IO, ActRef, server.Entry, server.Entry] = new Sm.ExecuteBracket[client.AtmOp] {
+
+      private[this] implicit val sch = sys.scheduler
+
+      override type M[a] = IO[a]
+      override type Res[st] = ActRef[st]
+      override type InitSt = server.Entry
+      override type FinSt = server.Entry
+
+      override def init = IO.fromFuture(IO {
+        sys.systemActorOf(mock1, "atmActor")
+      }).map(_.narrow[InitSt]).map(r => ActRef(r)(sys.scheduler))
+
+      override def exec[F, T, A](res: ActRef[F])(d: client.AtmOp[F, T, A]): IO[(ActRef[T], A)] = d match {
+        case client.Authenticate(c, p) =>
+          for {
+            resp <- res ? server.Authenticate(c, p)
+            res <- resp match {
+              case Failure() => IO.raiseError(new Exception("authentication error!!!"))
+              case s @ Success() => IO.pure((ActRef(s.cont)(res.scheduler), ()))
+            }
+          } yield res
+        case client.CheckBalance =>
+          for {
+            balance <- res ? server.CheckBalance()
+          } yield (ActRef(balance.cont), balance.amount)
+        case client.Quit =>
+          for {
+            ack <- res ? server.Quit()
+          } yield (ActRef(ack.cont), ())
+      }
+
+      override def fin(res: Either[Res[InitSt], Res[FinSt]]): M[Unit] = {
+        val ref = res.fold(x => x, x => x)
+        ref ! StopYourself
+      }
+    }
+
+    val mock1: Behavior[Any] = Behaviors.receive { (ctx, msg) =>
+      msg match {
+        case a @ server.Authenticate(c, p) =>
+          println("Successful authentication")
+          a.cont ! server.Success()(ctx.self)
+          Behaviors.same
+        case m: server.Menu =>
+          m match {
+            case c @ server.CheckBalance() =>
+              println("Returning balance")
+              c.cont ! server.Balance(123)(ctx.self)
+            case q @ server.Quit() =>
+              println("Quit")
+              q.cont ! server.Bye()(ctx.self)
+          }
+          Behaviors.same
+        case server.StopYourself =>
+          println(s"stopping actor")
+          Behaviors.stopped
+        case x =>
+          println(s"unhandled: $x")
+          Behaviors.same
+      }
+    }
+  }
+
+  object client {
+
+    sealed trait AtmOp[F, T, A]
+    final case class Authenticate(card: String, pin: String)
+      extends AtmOp[server.Entry, server.Menu, Unit]
+    final case object CheckBalance
+      extends AtmOp[server.Menu, server.Entry, Int]
+    final case object Quit
+      extends AtmOp[server.Menu, server.Entry, Unit]
+
+    type AtmSm[F, T, A] = Sm[AtmOp, F, T, A]
+
+    def authenticate(card: String, pin: String): AtmSm[server.Entry, server.Menu, Unit] =
+      Sm.liftF(Authenticate(card, pin))
+    val checkBalance: AtmSm[server.Menu, server.Entry, Int] =
+      Sm.liftF(CheckBalance)
+    val quit: AtmSm[server.Menu, server.Entry, Unit] =
+      Sm.liftF(Quit)
+  }
+
+  import client._
+
+  val prog: client.AtmSm[server.Entry, server.Entry, (Int, Int)] = for {
+    _ <- authenticate("11232432", "1234")
+    b1 <- checkBalance
+    _ <- authenticate("11232432", "1234")
+    b2 <- checkBalance
+  } yield (b1, b2)
+
+  val tsk: IO[(Int, Int)] = for {
+    sys <- IO { ActorSystem(Behaviors.empty, "mock") }
+    maybeResult <- {
+      implicit val i: Sm.ExecuteBracket.Aux[AtmOp, IO, ActRef, server.Entry, server.Entry] = server.interp(sys)
+      prog.runBracketed[IO, ActRef].attempt
+    }
+    _ <- IO { sys.terminate() }
+    result <- IO.fromEither(maybeResult)
+  } yield result
 }

@@ -21,4 +21,7 @@ package object example {
   type Const[C] = {
     type λ[x] = C
   }
+
+  private[example] def default[A]: A =
+    null.asInstanceOf[A]
 }
