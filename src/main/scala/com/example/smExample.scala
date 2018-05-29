@@ -161,7 +161,7 @@ object atmCh extends SmExample {
     b <- checkBalance
   } yield b
 
-  val mock1: Behavior[Any] =  Behaviors.receive { (ctx, msg) =>
+  val mock1: Behavior[Any] = Behaviors.receive { (ctx, msg) =>
     msg match {
       case a @ msgs.Authenticate(c, p) =>
         println("Successful authentication")

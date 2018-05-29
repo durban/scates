@@ -83,8 +83,6 @@ object IxMonad {
         F.map(F.pure(a))(a => (s, a))
       }
       override def tailRecM[Z[_, _, _], S1, S2, A, B](a: Z[S1, S2, A])(f: FunctionTr[Z, IndexedStateT[F, ?, ?, ?], A, B])(implicit Z: IxMonad[Z]): IndexedStateT[F, S1, S2, B] = {
-        // FIXME: This depends on https://github.com/typelevel/cats/pull/2187
-        // FIXME: which will add a stack-safe flatMap to IndexedStateT.
         defaultTailRecM(a)(f)
       }
     }
@@ -99,8 +97,6 @@ object IxMonad {
         F.map(F.pure(a))(a => (s, a))
       }
       override def tailRecM[Z[_, _, _], S1, S2, A, B](a: Z[S1, S2, A])(f: FunctionTr[Z, Sm.ResRepr[F, R]#λ, A, B])(implicit Z: IxMonad[Z]): IndexedStateT[F, R[S1], R[S2], B] = {
-        // FIXME: This depends on https://github.com/typelevel/cats/pull/2187
-        // FIXME: which will add a stack-safe flatMap to IndexedStateT.
         defaultTailRecM(a)(f)
       }
     }

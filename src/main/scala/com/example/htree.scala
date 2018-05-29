@@ -52,7 +52,7 @@ final object HTree {
     implicit def hconsWrite[S, L <: St.Label with Singleton, T <: HTree](
       implicit
       ttl: Trace[L],
-      tail: Debug[T],
+      tail: Debug[T]
     ): Debug[St.Move[S, L] :: T] = Debug.instance(s"Move[${ttl.trace}] :: ${tail.debug}")
   }
 
@@ -61,7 +61,7 @@ final object HTree {
     implicit def hconsRead[S, L <: St.Label with Singleton, T <: HTree](
       implicit
       ttl: Trace[L],
-      tail: Debug[T],
+      tail: Debug[T]
     ): Debug[St.InState[S, L] :: T] = Debug.instance(s"Read[${ttl.trace}] :: ${tail.debug}")
   }
 
