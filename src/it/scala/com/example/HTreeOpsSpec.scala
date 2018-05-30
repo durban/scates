@@ -86,16 +86,16 @@ final object HTreeOpsSpec {
 
   sealed trait Phantom
 
-  val l = St.unsafeRun(St.create[Rs1, Int]).unsafeRunSync()
+  val l = St.create[Rs1, Int].run.unsafeRun.unsafeRunSync()
   implicitly[l.Res[Phantom] =:= Rs1[Phantom]]
 
-  val m = St.unsafeRun(St.create[Rs2, Int]).unsafeRunSync()
+  val m = St.create[Rs2, Int].run.unsafeRun.unsafeRunSync()
   implicitly[m.Res[Phantom] =:= Rs2[Phantom]]
 
-  val n1 = St.unsafeRun(St.create[Rs3, Sa]).unsafeRunSync()
+  val n1 = St.create[Rs3, Sa].run.unsafeRun.unsafeRunSync()
   implicitly[n1.Res[Phantom] =:= Rs3[Phantom]]
 
-  val n2 = St.unsafeRun(St.create[Rs3, Sa]).unsafeRunSync()
+  val n2 = St.create[Rs3, Sa].run.unsafeRun.unsafeRunSync()
   implicitly[n2.Res[Phantom] =:= Rs3[Phantom]]
 
   private def filter(): Unit = {
