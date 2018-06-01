@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,18 @@
 
 package com.example
 
+import cats.Monad
+import cats.data.IndexedStateT
+import cats.implicits._
+
+import cats.effect.{ Sync, ExitCase }
+import fs2.async.Ref
+
 final class Sm[S[_, _, _], F, T, A] private (
   private val repr: IxFree[S, F, T, A]
 ) {
 
-  import Sm.{ Execute, Create }
+  import Sm.{ Execute, ExecuteBracket }
 
   def flatMap[B, U](f: A => Sm[S, T, U, B]): Sm[S, F, U, B] =
     new Sm(repr.flatMap(a => f(a).repr))
@@ -29,84 +36,120 @@ final class Sm[S[_, _, _], F, T, A] private (
     new Sm(repr.map(f))
 
   // TODO: infer `R`
-  def run[M[_] : cats.Monad : scalaz.Monad, R[_]](
+  def run[M[_] : Monad, R[_]](
     implicit
-    exec: Execute.Aux[S, M, R],
-    mk: Create.Aux[S, R, F]
-  ): M[A] = {
+    exec: Execute.Aux[S, M, R, F, T]
+  ): M[A] = for {
+    resource <- exec.init
+    rr <- execOnly[M, R](resource)
+    (_, result) = rr
+  } yield result
+
+  def execOnly[M[_] : Monad, R[_]](resource: R[F])(
+    implicit
+    exec: Execute.Aux[S, M, R, F, T]
+  ): M[(R[T], A)] = {
     val fx = new FunctionX[S, Sm.ResRepr[M, exec.Res]#λ] {
-      def apply[G, U, X](sa: S[G, U, X]): scalaz.IndexedStateT[M, exec.Res[G], exec.Res[U], X] = {
-        scalaz.IndexedStateT { res: exec.Res[G] =>
+      def apply[G, U, X](sa: S[G, U, X]): IndexedStateT[M, exec.Res[G], exec.Res[U], X] = {
+        IndexedStateT { res: exec.Res[G] =>
           exec.exec(res)(sa)
         }
       }
     }
     val st = repr.foldMap[Sm.ResRepr[M, exec.Res]#λ](fx)
-    val initRes: exec.Res[F] = mk.mk
-    val res: M[A] = cats.Monad[M].map(st.run(initRes))(_._2)
-    res
+    st.run(resource)
+  }
+
+  def runBracketed[M[_], R[_]](
+    implicit
+    M: Sync[M],
+    exec: ExecuteBracket.Aux[S, M, R, F, T]
+  ): M[A] = {
+    val acq = for {
+      ref <- Ref[M, R[T]](default[R[T]])
+      res <- exec.init
+    } yield (res, ref)
+    M.bracketCase(acq) { rr =>
+      val (res, ref) = rr
+      execOnly[M, R](res).flatTap { ra =>
+        val (finRes, _) = ra
+        ref.modify { _ => finRes }
+      }.map(_._2)
+    } { (rr, ec) =>
+      val (initRes, ref) = rr
+      ec match {
+        case ExitCase.Completed =>
+          ref.get.map {
+            case null => Left(initRes)
+            case ok => Right(ok)
+          }.flatMap { either =>
+            exec.fin(either)
+          }
+        case ExitCase.Canceled(_) =>
+          exec.fin(Left(initRes))
+        case ExitCase.Error(_) =>
+          exec.fin(Left(initRes))
+      }
+    }
   }
 }
 
 object Sm {
 
   type ResRepr[M[_], Res[_]] = {
-    type λ[f, t, x] = scalaz.IndexedStateT[M, Res[f], Res[t], x]
+    type λ[f, t, x] = IndexedStateT[M, Res[f], Res[t], x]
   }
 
-  trait Initial[S[_, _, _]] {
-    type F
-  }
-
-  object Initial {
-
-    type Aux[S[_, _, _], A] = Initial[S] {
-      type F = A
-    }
-
-    def define[S[_, _, _], A]: Initial.Aux[S, A] =
-      new Initial[S] { type F = A }
-  }
-
-  trait Final[S[_, _, _], A]
-
-  trait Create[S[_, _, _]] {
+  trait Execute[S[_, _, _]] {
+    type M[a]
     type Res[st]
-    type Init
-    def mk: Res[Init]
-  }
-
-  object Create {
-
-    type Aux[S[_, _, _], R[_], I] = Create[S] {
-      type Res[st] = R[st]
-      type Init = I
-    }
-
-    def apply[S[_, _, _]](implicit inst: Create[S]): Create.Aux[S, inst.Res, inst.Init] =
-      inst
-
-    def instance[S[_, _, _], R[_], I](create: => R[I]): Create.Aux[S, R, I] = new Create[S] {
-      type Res[st] = R[st]
-      type Init = I
-      def mk: R[I] = create
-    }
-  }
-
-  trait Execute[S[_, _, _], M[_]] {
-    type Res[st]
+    type InitSt
+    type FinSt
+    def init: M[Res[InitSt]]
     def exec[F, T, A](res: Res[F])(sa: S[F, T, A]): M[(Res[T], A)]
   }
 
   object Execute {
-    type Aux[S[_, _, _], M[_], R[_]] = Execute[S, M] {
+    type Aux[S[_, _, _], M0[_], R[_], F, T] = Execute[S] {
+      type M[a] = M0[a]
+      type InitSt = F
+      type FinSt = T
       type Res[st] = R[st]
     }
   }
 
-  def pure[S[_, _, _], A](a: A)(implicit i: Initial[S]): Sm[S, i.F, i.F, A] =
+  trait ExecuteBracket[S[_, _, _]] extends Execute[S] {
+    def fin(res: Either[Res[InitSt], Res[FinSt]]): M[Unit]
+  }
+
+  object ExecuteBracket {
+    type Aux[S[_, _, _], M0[_], R[_], F, T] = ExecuteBracket[S] {
+      type M[a] = M0[a]
+      type InitSt = F
+      type FinSt = T
+      type Res[st] = R[st]
+    }
+  }
+
+  def pure[S[_, _, _], F, A](a: A): Sm[S, F, F, A] =
     new Sm(IxFree.pure(a))
 
   def liftF[S[_, _, _], F, T, A](sa: S[F, T, A]): Sm[S, F, T, A] =
     new Sm(IxFree.liftF(sa))
+
+  implicit def smIxMonad[S[_, _, _]]: IxMonad[Sm[S, ?, ?, ?]] = new IxMonad[Sm[S, ?, ?, ?]] {
+
+    def flatMap[F, T, U, A, B](fa: Sm[S, F, T, A])(f: A => Sm[S, T, U, B]): Sm[S, F, U, B] =
+      fa.flatMap(f)
+
+    def pure[F, A](a: A): Sm[S, F, F, A] =
+      Sm.pure(a)
+
+    // This should be okay, since `flatMap` is stack-safe
+    def tailRecM[Z[_, _, _], F, T, A, B](a: Z[F, T, A])(f: FunctionTr[Z, Sm[S, ?, ?, ?], A, B])(implicit Z: IxMonad[Z]): Sm[S, F, T, B] =
+      this.defaultTailRecM(a)(f)
+  }
+
+  implicit def smMonad[S[_, _, _], F]: Monad[Sm[S, F, F, ?]] =
+    IxMonad.monadFromIxMonad
 }

@@ -14,4 +14,12 @@
  * limitations under the License.
  */
 
-addSbtPlugin("io.get-coursier" % "sbt-coursier" % "1.1.0-M4")
+package com.example
+
+import cats.effect.IO
+
+sealed trait StExample extends AbstractExample {
+  def tsk: IO[Any]
+}
+
+// TODO: add examples here

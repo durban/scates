@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@
 lazy val scates = project.in(file("."))
   .settings(name := "scates")
   .settings(commonSettings)
+  .configs(IntegrationTest) // We're abusing IntegrationTest test for separating
+  .settings(Defaults.itSettings) // sources which take a long time to compile.
 
 lazy val commonSettings = Seq[Setting[_]](
   scalaVersion := "2.12.4-bin-typelevel-4",
@@ -27,7 +29,7 @@ lazy val commonSettings = Seq[Setting[_]](
     "-deprecation",
     "-unchecked",
     "-encoding", "UTF-8",
-    "-language:higherKinds",
+    "-language:higherKinds,existentials",
     "-Xlint:_",
     "-Xfuture",
     "-Xfatal-warnings",
@@ -48,7 +50,7 @@ lazy val commonSettings = Seq[Setting[_]](
   libraryDependencies ++= Seq(
     dependencies.cats,
     dependencies.fs2,
-    dependencies.scalaz,
+    dependencies.akka,
     Seq(
       dependencies.shapeless
     ),
@@ -62,21 +64,14 @@ lazy val commonSettings = Seq[Setting[_]](
 
 lazy val dependencies = new {
 
-  val catsVersion = "1.0.0-RC1"
-  val circeVersion = "0.9.0-M2"
-  val fs2Version = "0.10.0-M8"
+  val catsVersion = "1.1.0"
+  val fs2Version = "0.10.4"
 
-  val shapeless = "com.chuusai" %% "shapeless" % "2.3.2"
+  val shapeless = "com.chuusai" %% "shapeless" % "2.3.3"
   val cats = Seq(
     "org.typelevel" %% "cats-core" % catsVersion,
     "org.typelevel" %% "cats-free" % catsVersion,
-    "org.typelevel" %% "cats-effect" % "0.5"
-  )
-
-  val circe = Seq(
-    "io.circe" %% "circe-core" % circeVersion,
-    "io.circe" %% "circe-generic" % circeVersion,
-    "io.circe" %% "circe-parser" % circeVersion
+    "org.typelevel" %% "cats-effect" % "1.0.0-RC"
   )
 
   val fs2 = Seq(
@@ -90,10 +85,10 @@ lazy val dependencies = new {
   )
 
   val test = Seq(
-    "org.scalatest" %% "scalatest" % "3.0.2"
+    "org.scalatest" %% "scalatest" % "3.0.5"
   )
 
-  val scalaz = Seq(
-    "org.scalaz" %% "scalaz-effect" % "7.2.17"
+  val akka = Seq(
+    "com.typesafe.akka" %% "akka-actor-typed" % "2.5.12"
   )
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2018 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,4 +14,17 @@
  * limitations under the License.
  */
 
-addSbtPlugin("io.get-coursier" % "sbt-coursier" % "1.1.0-M4")
+package com.example
+
+import cats.effect.IO
+
+abstract class AbstractExample {
+
+  def tsk: IO[Any]
+
+  def main: IO[Unit] =
+    tsk.flatMap(r => IO { println(r) })
+
+  final def main(args: Array[String]): Unit =
+    main.unsafeRunSync()
+}

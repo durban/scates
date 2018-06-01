@@ -1,6 +1,6 @@
 <!--
 
-   Copyright 2016-2017 Daniel Urban and contributors listed in AUTHORS
+   Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -18,7 +18,11 @@
 
 # scates
 
-Experiments with state machines.
+Experiments with statically checking state machines.
+
+- [`IxFree`](src/main/scala/com/example/IxFree.scala) is a stack-safe indexed free monad implementation.
+- [`Sm`](src/main/scala/com/example/Sm.scala) is a utility for working with FSMs, built on `IxFree`.
+- [`St`](src/main/scala/com/example/St.scala) is an experiment with an alternative representation (currently it doesn't work).
 
 ## License
 
