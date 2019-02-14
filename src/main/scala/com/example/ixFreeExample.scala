@@ -76,8 +76,8 @@ object atmWithIxFree extends IxFreeExample {
 
   type AtmSm[F, T, A] = IxFree[AtmOp, F, T, A]
 
-  def authenticate(card: String, pin: String): AtmSm[Start, Menu, Unit] =
-    IxFree.liftF(Authenticate(card, pin))
+  def authenticate(cardId: String, pin: String): IxFree[AtmOp, Start, Menu, Unit] =
+    IxFree.liftF(Authenticate(cardId, pin))
   val checkBalance: AtmSm[Menu, Start, Int] =
     IxFree.liftF(CheckBalance)
   val quit: IxFree[AtmOp, Menu, Start, Unit] =
@@ -87,7 +87,7 @@ object atmWithIxFree extends IxFreeExample {
     def apply[F, T, A](op: AtmOp[F, T, A]): IO[A] =
       op match {
         case Authenticate(_, "1234") =>
-          IO(println("Card accepted"))
+          IO { println("Card accepted") }
         case Authenticate(_, _) =>
           IO.raiseError(new Exception)
         case CheckBalance =>
