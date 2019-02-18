@@ -35,7 +35,7 @@ lazy val commonSettings = Seq[Setting[_]](
     "-Xfatal-warnings",
     "-Yno-adapted-args",
     "-Ywarn-numeric-widen",
-    "-Ywarn-dead-code",
+    // "-Ywarn-dead-code", // we want to use ??? in examples
     "-Ypartial-unification",
     "-Ywarn-unused-import"
   ),
