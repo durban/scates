@@ -1,0 +1,5 @@
+  for {
+    secret ← UserApi.readSecret
+    // login AFTER readSecret
+    _ ← UserApi.login(myCredentials) // compile error
+  } yield secret

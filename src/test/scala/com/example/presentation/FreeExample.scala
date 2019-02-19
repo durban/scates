@@ -28,9 +28,9 @@ object FreeExample {
   }
 
   val myProgram: Free[UserOp, String] = for {
-    _ <- UserApi.login(myCredentials)
-    secret <- UserApi.readSecret
-    _ <- UserApi.logout
+    _ ← UserApi.login(myCredentials)
+    secret ← UserApi.readSecret
+    _ ← UserApi.logout
   } yield secret
 
   val interpreter: UserOp ~> IO = ??? // ...
@@ -39,9 +39,9 @@ object FreeExample {
     myProgram.foldMap[IO](interpreter)
 
   val badProgram: Free[UserOp, String] = for {
-    // No login!
-    secret <- UserApi.readSecret
-    _ <- UserApi.logout
+    secret ← UserApi.readSecret
+    // login AFTER readSecret
+    _ ← UserApi.login(myCredentials)
   } yield secret
 
   val badIO: IO[String] =
