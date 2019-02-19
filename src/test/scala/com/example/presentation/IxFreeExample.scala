@@ -13,7 +13,7 @@ object IxFreeExample {
   case object ReadSecret extends UserOp[LoggedIn, LoggedIn, String]
   case object Logout extends UserOp[LoggedIn, LoggedOut, Unit]
 
-  object UserApi {
+  object UserApi extends UserApi {
     def login(c: Credentials): IxFree[UserOp, LoggedOut, LoggedIn, Unit] =
       IxFree.liftF(Login(c))
     def readSecret: IxFree[UserOp, LoggedIn, LoggedIn, String] =
@@ -24,20 +24,29 @@ object IxFreeExample {
 
   val interpreter: FunctionX[UserOp, ({ type λ[f, t, A] = IO[A] })#λ] = ???
 
-  val myProgram: IxFree[UserOp, LoggedOut, LoggedOut, String] = for {
-    _ <- UserApi.login(myCredentials)
-    secret <- UserApi.readSecret
-    _ <- UserApi.logout
-  } yield secret
+  trait UserApi {
+    def login(c: Credentials):
+      IxFree[UserOp, LoggedOut, LoggedIn, Unit]
+    def readSecret:
+      IxFree[UserOp, LoggedIn, LoggedIn, String]
+    def logout: IxFree[UserOp, LoggedIn, LoggedOut, Unit]
+  }
+
+  val myProg: IxFree[UserOp, LoggedOut, LoggedOut, String] =
+    for {
+      _ ← UserApi.login(myCredentials)
+      secret ← UserApi.readSecret
+      _ ← UserApi.logout
+    } yield secret
 
   val myIO: IO[String] =
-    myProgram.foldMap[({ type λ[f, t, A] = IO[A] })#λ](interpreter)
+    myProg.foldMapA(interpreter)
 
   val badProgram: IxFree[UserOp, LoggedIn, LoggedOut, String] = for {
-    secret <- UserApi.readSecret
-    _ <- UserApi.logout
+    secret ← UserApi.readSecret
+    _ ← UserApi.logout
   } yield secret
 
   val badIO: IO[String] =
-    badProgram.foldMap[({ type λ[f, t, A] = IO[A] })#λ](interpreter)
+    badProgram.foldMapA(interpreter)
 }
