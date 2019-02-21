@@ -34,6 +34,7 @@ object IxFreeExample {
 
   val myProg: IxFree[UserOp, LoggedOut, LoggedOut, String] =
     for {
+      // we need to actually `login`:
       _ ← UserApi.login(myCredentials)
       secret ← UserApi.readSecret
       _ ← UserApi.logout
@@ -41,12 +42,4 @@ object IxFreeExample {
 
   val myIO: IO[String] =
     myProg.foldMapA(interpreter)
-
-  val badProgram: IxFree[UserOp, LoggedIn, LoggedOut, String] = for {
-    secret ← UserApi.readSecret
-    _ ← UserApi.logout
-  } yield secret
-
-  val badIO: IO[String] =
-    badProgram.foldMapA(interpreter)
 }
