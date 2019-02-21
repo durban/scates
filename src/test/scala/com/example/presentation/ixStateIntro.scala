@@ -16,8 +16,8 @@ object StateIntro {
 object StateIntroExample {
 
   val simpleProg: State[Int, Unit] = for {
-    num ← State.get
-    _ ← State.set(num + 1)
+    num ← State.get // read an Int
+    _ ← State.set(num + 1) // write an Int
   } yield ()
 }
 
@@ -42,7 +42,7 @@ object IxStateIntroExample {
   }
 
   val indexedProg: IndexedState[Int, String, Unit] = for {
-    num ← IndexedState.get
-    _ ← IndexedState.set("this is a String")
+    num ← IndexedState.get // read an Int
+    _ ← IndexedState.set("str") // write a String!
   } yield ()
 }
