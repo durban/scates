@@ -21,7 +21,11 @@
 Experiments with statically checking state machines.
 
 - [`IxFree`](src/main/scala/com/example/IxFree.scala) is a stack-safe indexed free monad implementation.
-- [`Sm`](src/main/scala/com/example/Sm.scala) is a utility for working with FSMs, built on `IxFree`.
+  - Examples from the presentation:
+    - [free monad](src/test/scala/com/example/presentation/FreeExample.scala) version
+    - [indexed state monad](src/test/scala/com/example/presentation/IxStateExample.scala) version
+    - [indexed free monad](src/test/scala/com/example/presentation/IxFreeExample.scala) version
+- [`Sm`](src/main/scala/com/example/Sm.scala) is a more capable utility for working with FSMs, built on `IxFree`.
 - [`St`](src/main/scala/com/example/St.scala) is an experiment with an alternative representation (currently it doesn't work).
 
 ## License
