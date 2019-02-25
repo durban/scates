@@ -118,7 +118,7 @@ object IxMonad {
     }
   }
 
-  implicit def ixMonadFromMonad[S[_]](implicit S: Monad[S]): IxMonad[Fake[S]#λ] = new IxMonad[Fake[S]#λ] {
+  def ixMonadFromMonad[S[_]](implicit S: Monad[S]): IxMonad[Fake[S]#λ] = new IxMonad[Fake[S]#λ] {
 
     override def flatMap[F, T, U, A, B](fa: S[A])(f: A => S[B]): S[B] =
       S.flatMap(fa)(f)
