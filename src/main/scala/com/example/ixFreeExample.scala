@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2016-2019 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,8 +76,8 @@ object atmWithIxFree extends IxFreeExample {
 
   type AtmSm[F, T, A] = IxFree[AtmOp, F, T, A]
 
-  def authenticate(card: String, pin: String): AtmSm[Start, Menu, Unit] =
-    IxFree.liftF(Authenticate(card, pin))
+  def authenticate(cardId: String, pin: String): IxFree[AtmOp, Start, Menu, Unit] =
+    IxFree.liftF(Authenticate(cardId, pin))
   val checkBalance: AtmSm[Menu, Start, Int] =
     IxFree.liftF(CheckBalance)
   val quit: IxFree[AtmOp, Menu, Start, Unit] =
@@ -87,7 +87,7 @@ object atmWithIxFree extends IxFreeExample {
     def apply[F, T, A](op: AtmOp[F, T, A]): IO[A] =
       op match {
         case Authenticate(_, "1234") =>
-          IO(println("Card accepted"))
+          IO { println("Card accepted") }
         case Authenticate(_, _) =>
           IO.raiseError(new Exception)
         case CheckBalance =>

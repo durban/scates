@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2016-2019 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ lazy val commonSettings = Seq[Setting[_]](
     "-Xfatal-warnings",
     "-Yno-adapted-args",
     "-Ywarn-numeric-widen",
-    "-Ywarn-dead-code",
+    // "-Ywarn-dead-code", // we want to use ??? in examples
     "-Ypartial-unification",
     "-Ywarn-unused-import"
   ),

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
+ * Copyright 2016-2019 Daniel Urban and contributors listed in AUTHORS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ package com.example
 import scala.language.existentials
 
 import scala.annotation.tailrec
+
+import cats.Monad
 
 sealed abstract class IxFree[S[_, _, _], F, T, A] extends Product with Serializable {
 
@@ -89,6 +91,11 @@ sealed abstract class IxFree[S[_, _, _], F, T, A] extends Product with Serializa
         result.value
       }
     })
+  }
+
+  // FIXME: simplified foldMap
+  final def foldMapA[M[_]](f: FunctionX[S, IxMonad.Fake[M]#λ])(implicit M: Monad[M]): M[A] = {
+    foldMap[IxMonad.Fake[M]#λ](f)(IxMonad.ixMonadFromMonad)
   }
 }
 

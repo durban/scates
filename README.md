@@ -1,6 +1,6 @@
 <!--
 
-   Copyright 2016-2018 Daniel Urban and contributors listed in AUTHORS
+   Copyright 2016-2019 Daniel Urban and contributors listed in AUTHORS
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -21,7 +21,12 @@
 Experiments with statically checking state machines.
 
 - [`IxFree`](src/main/scala/com/example/IxFree.scala) is a stack-safe indexed free monad implementation.
-- [`Sm`](src/main/scala/com/example/Sm.scala) is a utility for working with FSMs, built on `IxFree`.
+  - Examples from the Lambda Days 2019 presentation:
+    - [free monad](src/test/scala/com/example/presentation/FreeExample.scala) version
+    - [indexed state monad](src/test/scala/com/example/presentation/IxStateExample.scala) version
+    - [indexed free monad](src/test/scala/com/example/presentation/IxFreeExample.scala) version
+  - Presentation [slides](https://github.com/dilation/lambda-days/raw/master/state_machine_talk.pdf) (PDF)
+- [`Sm`](src/main/scala/com/example/Sm.scala) is a more capable utility for working with FSMs, built on `IxFree`.
 - [`St`](src/main/scala/com/example/St.scala) is an experiment with an alternative representation (currently it doesn't work).
 
 ## License
